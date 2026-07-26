@@ -29,7 +29,11 @@
 #define ENDLESS_MIRROR_CHANCE_ROUND 8  // Rounds with a coin-flip mirror.
 #define ENDLESS_MIRROR_ALWAYS_ROUND 12 // Every race mirrored from here on.
 
-#define ENDLESS_MAX_POOL 32
+// Layout of ASSET_MISC_TRACKS_MENU_IDS: one row of 6 entries per world, the
+// first 4 being races and the last 2 the trophy race and battle arena.
+#define ENDLESS_WORLD_COUNT 5
+#define ENDLESS_RACES_PER_WORLD 4
+#define ENDLESS_MAX_POOL (ENDLESS_WORLD_COUNT * ENDLESS_RACES_PER_WORLD)
 
 /************ .data ************/
 
@@ -87,9 +91,14 @@ static char *endless_append_string(char *dst, const char *src) {
 }
 
 /**
- * Build the pool of candidate tracks from the tracks-menu level table:
- * the first four entries of each of the four main worlds, filtered to
- * standard races only.
+ * Build the pool of candidate tracks from the tracks-menu level table: the
+ * four race slots of every world, Future Fun Land included, filtered to
+ * standard races only. The table's remaining slots per world are the trophy
+ * race and the battle arena, which are not raceable rounds.
+ *
+ * Future Fun Land is drawn from the table directly rather than through the
+ * menu, so its tracks are in the rotation from round one without needing the
+ * adventure-mode unlock -- this mode is separate from that progression.
  */
 static void endless_build_pool(void) {
     s8 *levelIds = (s8 *) get_misc_asset(ASSET_MISC_TRACKS_MENU_IDS);
@@ -98,8 +107,8 @@ static void endless_build_pool(void) {
     s32 id;
 
     sEndlessPoolSize = 0;
-    for (world = 1; world <= 4; world++) {
-        for (slot = 0; slot < 4; slot++) {
+    for (world = 1; world <= ENDLESS_WORLD_COUNT; world++) {
+        for (slot = 0; slot < ENDLESS_RACES_PER_WORLD; slot++) {
             id = levelIds[((world - 1) * 6) + slot];
             if (id < 0) {
                 continue;

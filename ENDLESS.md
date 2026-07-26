@@ -21,8 +21,9 @@ changes, and the game data has to come from your own cartridge dump.
 
 Pick **Tracks mode → the Trophy Race column** (always unlocked in this hack).
 
-- Every round draws a random track from a shuffle bag covering all four main
-  worlds; each track appears once before any repeats.
+- Every round draws a random track from a shuffle bag covering all 20 races
+  across all five worlds, Future Fun Land included; each track appears once
+  before any repeats.
 - **Survive** by meeting the round's required finish position. It tightens as
   you go: top 4 (rounds 1-3) → top 3 (4-6) → top 2 (7-9) → **1st only** (10+).
   Miss it once and the run ends.
