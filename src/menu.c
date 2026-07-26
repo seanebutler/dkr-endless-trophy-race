@@ -5,6 +5,7 @@
 #include "audiosfx.h"
 #include "camera.h"
 #include "common.h"
+#include "endless.h"
 #include "f3ddkr.h"
 #include "fade_transition.h"
 #include "font.h"
@@ -8133,6 +8134,7 @@ s32 menu_file_select_loop(s32 updateRate) {
         music_change_on();
         init_racer_headers();
         gTrophyRaceWorldId = 0;
+        endless_stop();
         if (settings->newGame) {
             if (gIsInAdventureTwo) {
                 settings->cutsceneFlags |= CUTSCENE_ADVENTURE_TWO;
@@ -8368,6 +8370,10 @@ void menu_track_select_init(void) {
                 if (sp74 == 4) {
                     gTrackSelectIDs[i][j] = trackIds[getTrackId(j)];
                 }
+                // ENDLESS: the trophy column starts the Endless Trophy Race
+                // and is always unlocked (vanilla required silver-coin-clearing
+                // the whole world first).
+                gTrackSelectIDs[i][j] = trackIds[getTrackId(j)];
             } else if (j == 5 && (settings->keys & (1 << (i + 1)))) {
                 gTrackSelectIDs[i][j] = trackIds[getTrackId(j)];
             }
@@ -8553,6 +8559,8 @@ s32 menu_track_select_loop(s32 updateRate) {
         gTrophyRaceWorldId = gTrackSelectCursorY + 1;
         gInAdvModeTrophyRace = FALSE;
         gTrophyRaceRound = 0;
+        // ENDLESS: the Tracks-mode trophy race column starts the Endless Trophy Race.
+        endless_start();
         menu_init(MENU_TROPHY_RACE_ROUND);
         return MENU_RESULT_CONTINUE;
     }
@@ -10366,6 +10374,7 @@ s32 menu_pause_loop(UNUSED Gfx **dl, s32 updateRate) {
             if (gMenuSubOption == 1) {
                 if (gTrophyRaceWorldId != 0) {
                     gTrophyRaceWorldId = 0;
+                    endless_stop();
                     if (gIsInTracksMode == FALSE) {
                         return PAUSE_QUIT_LOBBY;
                     }
@@ -11918,6 +11927,8 @@ void menu_unload_bigfont(void) {
  */
 void trophyround_adventure(void) {
     Settings *settings = get_settings();
+    // ENDLESS: adventure-mode trophy races are always the vanilla four-round format.
+    endless_stop();
     gTrophyRaceWorldId = settings->worldId;
     gTrophyRaceRound = 0;
     settings->unk4C->courseID = settings->courseId;
@@ -11940,20 +11951,27 @@ void menu_trophy_race_round_init(void) {
     settings = get_settings();
     levelIds = (s8 *) get_misc_asset(ASSET_MISC_TRACKS_MENU_IDS); // Returns level ids array.
 
-    if (gTrophyRaceRound == 0) {
+    // ENDLESS: points persist for the whole run (zeroed in endless_start),
+    // and the next track comes from the shuffle bag instead of the world table.
+    if (gTrophyRaceRound == 0 && !endless_is_active()) {
         for (index = 0; index < 8; index++) {
             settings->racers[index].trophy_points = 0;
         }
     }
 
-    // Is this a fakematch? I can't tell.
-    do {
-        index = levelIds[((gTrophyRaceWorldId - 1) * 6) + gTrophyRaceRound];
-        if (index != -1) {
-            continue;
-        }
-        index = (index + 1) & 3;
-    } while (index == -1);
+    if (endless_is_active()) {
+        index = endless_pick_track();
+        gTrophyRaceWorldId = endless_current_world();
+    } else {
+        // Is this a fakematch? I can't tell.
+        do {
+            index = levelIds[((gTrophyRaceWorldId - 1) * 6) + gTrophyRaceRound];
+            if (index != -1) {
+                continue;
+            }
+            index = (index + 1) & 3;
+        } while (index == -1);
+    }
 
     for (i = 0; i < gNumberOfActivePlayers; i++) {
         gPlayerSelectVehicle[i] = leveltable_vehicle_default(index);
@@ -11992,7 +12010,13 @@ void trophyround_render(UNUSED s32 updateRate) {
     }
 
     worldName = level_name(level_world_id(gTrophyRaceWorldId));
-    levelName = level_name(levelIds[((gTrophyRaceWorldId - 1) * 6) + gTrophyRaceRound]);
+    // ENDLESS: the round counter is unbounded, so the round text is built at
+    // runtime and the track comes from the shuffle bag.
+    if (endless_is_active()) {
+        levelName = level_name(endless_current_track());
+    } else {
+        levelName = level_name(levelIds[((gTrophyRaceWorldId - 1) * 6) + gTrophyRaceRound]);
+    }
     set_text_background_colour(0, 0, 0, 0);
     set_text_font(ASSET_FONTS_BIGFONT);
     // Text Shadows first
@@ -12004,9 +12028,17 @@ void trophyround_render(UNUSED s32 updateRate) {
     draw_text(&sMenuCurrDisplayList, SCREEN_WIDTH_HALF, 32, (char *) worldName, ALIGN_MIDDLE_CENTER);
     draw_text(&sMenuCurrDisplayList, SCREEN_WIDTH_HALF, 64, gMenuText[ASSET_MENU_TEXT_TROPHYRACE],
               ALIGN_MIDDLE_CENTER); // TROPHY RACE
-    draw_text(&sMenuCurrDisplayList, SCREEN_WIDTH_HALF, yPos + 176,
-              gMenuText[ASSET_MENU_TEXT_ROUNDONE + gTrophyRaceRound],
-              ALIGN_MIDDLE_CENTER); // ROUND ONE / ROUND TWO / ROUND THREE / ROUND FOUR
+    if (endless_is_active()) {
+        // FUNFONT has digit glyphs; BIGFONT is letters-only.
+        set_text_font(ASSET_FONTS_FUNFONT);
+        draw_text(&sMenuCurrDisplayList, SCREEN_WIDTH_HALF, yPos + 176, endless_round_text(), ALIGN_MIDDLE_CENTER);
+        draw_text(&sMenuCurrDisplayList, SCREEN_WIDTH_HALF, yPos + 144, endless_goal_text(), ALIGN_MIDDLE_CENTER);
+        set_text_font(ASSET_FONTS_BIGFONT);
+    } else {
+        draw_text(&sMenuCurrDisplayList, SCREEN_WIDTH_HALF, yPos + 176,
+                  gMenuText[ASSET_MENU_TEXT_ROUNDONE + gTrophyRaceRound],
+                  ALIGN_MIDDLE_CENTER); // ROUND ONE / ROUND TWO / ROUND THREE / ROUND FOUR
+    }
     draw_text(&sMenuCurrDisplayList, SCREEN_WIDTH_HALF, yPos + 208, (char *) levelName, ALIGN_MIDDLE_CENTER);
 }
 
@@ -12024,7 +12056,11 @@ s32 menu_trophy_race_round_loop(s32 updateRate) {
         gTrackNameVoiceDelay -= updateRate;
         if (gTrackNameVoiceDelay <= 0) {
             // This is mostly likely supposed to be a multi dimensional array
-            temp = trackMenuIds[(((gTrophyRaceWorldId - 1) * 6) + gTrophyRaceRound)];
+            if (endless_is_active()) {
+                temp = endless_current_track();
+            } else {
+                temp = trackMenuIds[(((gTrophyRaceWorldId - 1) * 6) + gTrophyRaceRound)];
+            }
             ttVoiceLine = gTTVoiceLines[temp];
             if (ttVoiceLine != -1) {
                 sound_play(ttVoiceLine, NULL);
@@ -12048,7 +12084,11 @@ s32 menu_trophy_race_round_loop(s32 updateRate) {
     }
     if (gMenuDelay > 30) {
         trophyround_free();
-        gTrackIdToLoad = trackMenuIds[(((gTrophyRaceWorldId - 1) * 6) + gTrophyRaceRound)];
+        if (endless_is_active()) {
+            gTrackIdToLoad = endless_current_track();
+        } else {
+            gTrackIdToLoad = trackMenuIds[(((gTrophyRaceWorldId - 1) * 6) + gTrophyRaceRound)];
+        }
         gTrackSpecifiedWithTrackIdToLoad = 1;
         return gNumberOfActivePlayers;
     }
@@ -12164,11 +12204,15 @@ void menu_trophy_race_rankings_init(void) {
     menu_assetgroup_load(gTrophyRankingsObjectIndices);
     menu_imagegroup_load(gTrophyRaceImageIndices);
     gPrevTrophyRaceRound = gTrophyRaceRound;
-    do {
-        if (++gTrophyRaceRound >= 4) {
-            break;
-        }
-    } while (trackMenuIds[((gTrophyRaceWorldId - 1) * 6) + gTrophyRaceRound] == -1);
+    // ENDLESS: gTrophyRaceRound stays 0 so this screen always offers CONTINUE;
+    // the real round counter advances in the rankings exit hook.
+    if (!endless_is_active()) {
+        do {
+            if (++gTrophyRaceRound >= 4) {
+                break;
+            }
+        } while (trackMenuIds[((gTrophyRaceWorldId - 1) * 6) + gTrophyRaceRound] == -1);
+    }
 
     if (gTrophyRaceRound < 4) {
         gResultOptionText[0] = gMenuText[ASSET_MENU_TEXT_CONTINUE];
@@ -12280,6 +12324,31 @@ void rankings_render_order(s32 updateRate) {
     if (stage == RANKINGS_ORDER || stage == RANKINGS_EXIT) {
         draw_menu_elements(1, gTrophyRankingsTitle, 1.0f);
     }
+    // ENDLESS: overlay the run status on the rankings screen.
+    if (endless_is_active()) {
+        char *headline;
+        s32 survived = endless_player_survived();
+
+        if (survived) {
+            headline = endless_round_text();
+        } else {
+            headline = "GAME OVER";
+        }
+        set_text_background_colour(0, 0, 0, 0);
+        // FUNFONT has digit glyphs; BIGFONT is letters-only.
+        set_text_font(ASSET_FONTS_FUNFONT);
+        set_text_colour(0, 0, 0, 255, 128);
+        draw_text(&sMenuCurrDisplayList, SCREEN_WIDTH_HALF + 1, 17, headline, ALIGN_MIDDLE_CENTER);
+        draw_text(&sMenuCurrDisplayList, SCREEN_WIDTH_HALF + 1, 33, endless_score_text(), ALIGN_MIDDLE_CENTER);
+        if (survived) {
+            set_text_colour(255, 255, 255, 0, 255);
+        } else {
+            set_text_colour(255, 64, 64, 0, 255);
+        }
+        draw_text(&sMenuCurrDisplayList, SCREEN_WIDTH_HALF, 16, headline, ALIGN_MIDDLE_CENTER);
+        set_text_colour(255, 255, 255, 0, 255);
+        draw_text(&sMenuCurrDisplayList, SCREEN_WIDTH_HALF, 32, endless_score_text(), ALIGN_MIDDLE_CENTER);
+    }
 }
 
 /**
@@ -12372,7 +12441,18 @@ s32 menu_trophy_race_rankings_loop(s32 updateRate) {
                 rankings_free();
                 dialogue_close(7);
                 dialogue_clear(7);
-                if (gTrophyRaceRound < 4) {
+                // ENDLESS: survive -> next round forever; miss the required
+                // position -> the run is over, back to the track select menu.
+                if (endless_is_active()) {
+                    if (endless_player_survived()) {
+                        endless_advance_round();
+                        menu_init(MENU_TROPHY_RACE_ROUND);
+                    } else {
+                        endless_stop();
+                        gTrophyRaceWorldId = 0;
+                        menu_init(MENU_TRACK_SELECT);
+                    }
+                } else if (gTrophyRaceRound < 4) {
                     menu_init(MENU_TROPHY_RACE_ROUND);
                 } else {
 #ifdef AVOID_UB
@@ -13662,6 +13742,10 @@ s32 get_filtered_cheats(void) {
     }
     if (gIsInAdventureTwo && level_is_race()) {
         cheats |= CHEAT_MIRRORED_TRACKS; // Enable mirroring
+    }
+    // ENDLESS: high rounds run mirrored tracks, like Adventure Two.
+    if (endless_is_active() && endless_mirrored() && level_is_race()) {
+        cheats |= CHEAT_MIRRORED_TRACKS;
     }
     return cheats;
 }

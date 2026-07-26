@@ -7,6 +7,7 @@
 #include "audiosfx.h"
 #include "camera.h"
 #include "common.h"
+#include "endless.h"
 #include "joypad.h"
 #include "lights.h"
 #include "macros.h"
@@ -729,6 +730,10 @@ void aitable_init(s8 *aiLevelTable) {
         aiLevel += 5;
     }
     aiLevel = aiLevelTable[aiLevel];
+    // ENDLESS: walk the AI up the behaviour table bank as rounds progress.
+    if (endless_is_active()) {
+        aiLevel = endless_ai_level(aiLevel);
+    }
     if (get_filtered_cheats() & CHEAT_ULTIMATE_AI) {
         aiLevel = 9;
     }
@@ -750,6 +755,11 @@ void aitable_init(s8 *aiLevelTable) {
     gAIBehaviourTable = mempool_alloc_safe(temp, COLOUR_TAG_YELLOW);
     asset_load(ASSET_AI_BEHAVIOUR, (u32) gAIBehaviourTable, temp2, temp);
     mempool_free(gTempAssetTable);
+    // ENDLESS: past the top of the table bank, keep escalating the loaded
+    // table directly (speed bonus + action chances rise without bound).
+    if (endless_is_active() && get_game_mode() != GAMEMODE_MENU) {
+        endless_scale_ai_table(gAIBehaviourTable);
+    }
 }
 
 /**

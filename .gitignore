@@ -81,3 +81,12 @@ tools/ido-recomp
 tools/binutils
 *.d
 treemap.html
+
+# Claude Code artifacts
+.claude/
+.claude*/
+CLAUDE.md
+CLAUDE.local.md
+.mcp.json
+.claude-*
+claude-*.log
