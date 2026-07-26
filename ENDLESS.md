@@ -5,6 +5,18 @@ An arcade-style survival mode for Diddy Kong Racing, built on the
 Inspired by *Super Metroid Arcade: Endless Mode* — an infinite run of races
 that never stops getting harder, ending the first time you fall short.
 
+## Getting it
+
+Grab `EndlessTrophyRace.bps` from the
+[Releases page](https://github.com/seanebutler/dkr-endless-trophy-race/releases)
+and apply it to your own copy of the retail **US 1.0** ROM (SHA1
+`0cb115d8716dbbc2922fda38e533b9fe63bb9670`). Any BPS patcher works —
+[RomPatcher.js](https://www.marcrobledo.com/RomPatcher.js/) runs in a browser
+and needs no install.
+
+The ROM is not distributed here and never will be: the patch is this hack's own
+changes, and the game data has to come from your own cartridge dump.
+
 ## Playing it
 
 Pick **Tracks mode → the Trophy Race column** (always unlocked in this hack).
