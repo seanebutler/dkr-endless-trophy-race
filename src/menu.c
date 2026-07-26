@@ -14975,7 +14975,12 @@ s32 is_in_two_player_adventure(void) {
  * Returns 1 if T.T. is available to use, or 0 if not.
  */
 s32 is_tt_unlocked(void) {
-    return gActiveMagicCodes & CHEAT_CONTROL_TT;
+    // ENDLESS: T.T. is on the roster from the start rather than gated behind
+    // beating his ghost on every track (or entering the magic code), so the
+    // full cast is available to a mode that has nothing to do with adventure
+    // progression. Everything that offers T.T. -- the character select layout,
+    // the AI character pool, the hub NPC -- goes through here.
+    return TRUE;
 }
 
 /**
