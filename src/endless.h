@@ -26,11 +26,13 @@ s32 endless_current_track(void);
 s32 endless_current_world(void);
 s32 endless_required_position(void);
 s32 endless_player_survived(void);
+s32 endless_position_is_safe(s32 racePosition);
 s32 endless_mirrored(void);
 s32 endless_ai_level(s32 baseLevel);
 void endless_scale_ai_table(AIBehaviourTable *table);
 char *endless_round_text(void);
 char *endless_score_text(void);
 char *endless_goal_text(void);
+char *endless_hud_text(void);
 
 #endif

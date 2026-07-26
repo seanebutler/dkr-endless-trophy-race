@@ -426,6 +426,7 @@ void hud_bananas(Object_Racer *racer, s32 updateRate);
 void hud_race_finish_1player(Object_Racer *racer, s32 updateRate);
 void hud_speedometre(Object *obj, s32 updateRate);
 void hud_lap_count(Object_Racer *racer, s32 updateRate);
+void hud_endless_status(Object **racers, s32 racerCount);
 void hud_render_general(Gfx **dList, Mtx **mtx, Vertex **vtx, s32 updateRate);
 void hud_init(s32 viewportCount);
 void hud_main_battle(s32 countdown, Object *obj, s32 updateRate);

@@ -5,6 +5,7 @@
 #include "audiosfx.h"
 #include "camera.h"
 #include "common.h"
+#include "endless.h"
 #include "f3ddkr.h"
 #include "game.h"
 #include "game_text.h"
@@ -3317,6 +3318,49 @@ s8 hud_setting(void) {
  * Renders HUD elements concerning all players.
  * This includes the minimap and score counters for challenge modes.
  */
+/**
+ * ENDLESS: draw the run status along the bottom of the screen -- which round
+ * this is and the position that has to be held to survive it. The line turns
+ * red the moment the player drops out of that position, so the stakes are
+ * readable at a glance without looking away from the road.
+ *
+ * Single player only: the text is placed in screen coordinates, which would
+ * land in the wrong viewport on a split screen.
+ */
+void hud_endless_status(Object **racers, s32 racerCount) {
+    Object_Racer *racer;
+    char *status;
+    s32 yPos;
+    s32 i;
+
+    racer = NULL;
+    for (i = 0; i < racerCount; i++) {
+        if (racers[i]->racer->playerIndex != PLAYER_COMPUTER) {
+            racer = racers[i]->racer;
+            break;
+        }
+    }
+    if (racer == NULL) {
+        return;
+    }
+
+    status = endless_hud_text();
+    yPos = (osTvType == OS_TV_TYPE_PAL) ? 223 : 205;
+
+    set_kerning(TRUE);
+    set_text_font(ASSET_FONTS_FUNFONT);
+    set_text_background_colour(0, 0, 0, 0);
+    set_text_colour(0, 0, 0, 255, 255);
+    draw_text(&gHudDL, gHudOffsetX + 9, yPos + 1, status, ALIGN_MIDDLE_LEFT);
+    if (endless_position_is_safe(racer->racePosition)) {
+        set_text_colour(255, 255, 255, 0, 255);
+    } else {
+        set_text_colour(255, 80, 80, 0, 255);
+    }
+    draw_text(&gHudDL, gHudOffsetX + 8, yPos, status, ALIGN_MIDDLE_LEFT);
+    set_kerning(FALSE);
+}
+
 void hud_render_general(Gfx **dList, Mtx **mtx, Vertex **vtx, s32 updateRate) {
     Object_Racer *curRacerObj;
     LevelModel *lvlMdl;
@@ -3755,6 +3799,11 @@ void hud_render_general(Gfx **dList, Mtx **mtx, Vertex **vtx, s32 updateRate) {
             }
             sprite_opaque(FALSE);
         }
+    }
+    // ENDLESS: run status sits on top of everything else the HUD drew.
+    if (endless_is_active() && gNumActivePlayers == 1 && gHudLevelHeader->race_type == RACETYPE_DEFAULT) {
+        rendermode_reset(&gHudDL);
+        hud_endless_status(objectGroup, objectCount);
     }
     gDPPipeSync(gHudDL++);
     cam_set_sprite_anim_mode(SPRITE_ANIM_NORMALIZED);

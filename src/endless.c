@@ -50,6 +50,7 @@ static s32 sEndlessPoolCursor;
 static char sEndlessRoundText[16];
 static char sEndlessScoreText[24];
 static char sEndlessGoalText[24];
+static char sEndlessHudText[24];
 static s32 sEndlessLastTrack;
 
 /******************************/
@@ -252,6 +253,14 @@ s32 endless_mirrored(void) {
 }
 
 /**
+ * TRUE if a live race position (1 = first) currently clears this round's
+ * requirement. Drives the colour of the in-race status line.
+ */
+s32 endless_position_is_safe(s32 racePosition) {
+    return (racePosition - 1) <= endless_required_position();
+}
+
+/**
  * Round-based AI behaviour table: start low and climb one table per round so
  * the run passes through genuinely different AI personalities. (The vanilla
  * trophy-race tables sit at 6-8 already, so basing the ramp on them would
@@ -334,4 +343,21 @@ char *endless_goal_text(void) {
         endless_append_number(end, endless_required_position() + 1);
     }
     return sEndlessGoalText;
+}
+
+/**
+ * Compact one-line status for the in-race HUD: which round this is and the
+ * position that has to be held to survive it.
+ */
+char *endless_hud_text(void) {
+    char *end = endless_append_string(sEndlessHudText, "ROUND ");
+
+    end = endless_append_number(end, gEndlessRound + 1);
+    if (endless_required_position() == 0) {
+        endless_append_string(end, "  1ST");
+    } else {
+        end = endless_append_string(end, "  TOP ");
+        endless_append_number(end, endless_required_position() + 1);
+    }
+    return sEndlessHudText;
 }
