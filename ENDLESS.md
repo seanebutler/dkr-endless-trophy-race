@@ -61,8 +61,15 @@ game over screen — rounds are the headline record, and score only breaks ties
 between equally deep runs.
 
 Every run has a four-digit **seed** that fully determines its track order and
-mirror rolls, so a run can be handed to someone else to race. Change it with
-**L** (±100) and **R** (±1) on the first round's intro.
+mirror rolls, so a run can be handed to someone else to race. On the first
+round's intro, **left/right** picks a digit (the one being edited is drawn in
+yellow) and **up/down** turns it, so a seed someone reads out can be dialled in
+directly.
+
+The track updates as soon as a digit changes, but the scenery behind the text
+does not: loading it stops the menu music, so reloading it per keystroke would
+mean cutting the music every time a digit turns. Starting the race loads the
+right track regardless — the backdrop is only decoration.
 
 Adventure-mode trophy races are untouched and still play the vanilla four-round
 format. T.T. is on the roster from the start.

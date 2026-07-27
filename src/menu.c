@@ -11993,6 +11993,24 @@ void menu_trophy_race_round_init(void) {
 }
 
 /**
+ * ENDLESS: re-derive the first round's track after the seed changed. Updates
+ * everything cheap -- the track, its world, the default vehicle -- and leaves
+ * the backdrop reload to the caller, which defers it while digits are still
+ * being turned.
+ */
+void trophyround_reseed_track(void) {
+    s32 index = endless_pick_track();
+    s32 i;
+
+    gTrophyRaceWorldId = endless_current_world();
+    for (i = 0; i < gNumberOfActivePlayers; i++) {
+        gPlayerSelectVehicle[i] = leveltable_vehicle_default(index);
+    }
+    set_level_default_vehicle(leveltable_vehicle_default(index));
+    gTrackNameVoiceDelay = 10;
+}
+
+/**
  * Draws the trophy race intro text
  * Ex. (DINO DOMAIN / TROPHY RACE / ROUND ONE / ANCIENT LAKE)
  */
@@ -12050,9 +12068,21 @@ void trophyround_render(UNUSED s32 updateRate) {
         // These rows start clear of the BIGFONT title above them; adding
         // another one here will start overlapping it.
         if (endless_round() == 0) {
+            s32 lineWidth = get_text_width(endless_mode_text(), 0, 0);
+            s32 prefixWidth = get_text_width(endless_seed_prefix_text(), 0, 0);
+            s32 digitWidth = get_text_width(endless_seed_digit_text(), 0, 0);
+
             draw_text(&sMenuCurrDisplayList, SCREEN_WIDTH_HALF, yPos + 104, endless_mode_text(), ALIGN_MIDDLE_CENTER);
+            // Redraw the digit under the cursor in yellow. The line is centred,
+            // so its left edge plus the width of everything before the digit is
+            // where that digit starts.
+            set_text_colour(255, 224, 64, 200, 255);
+            draw_text(&sMenuCurrDisplayList, (SCREEN_WIDTH_HALF - (lineWidth / 2)) + prefixWidth + (digitWidth / 2),
+                      yPos + 104, endless_seed_digit_text(), ALIGN_MIDDLE_CENTER);
+            set_text_colour(255, 255, 255, 0, 255);
             draw_text(&sMenuCurrDisplayList, SCREEN_WIDTH_HALF, yPos + 120, endless_best_text(), ALIGN_MIDDLE_CENTER);
-            draw_text(&sMenuCurrDisplayList, SCREEN_WIDTH_HALF, yPos + 136, "Z: MODE    L/R: SEED", ALIGN_MIDDLE_CENTER);
+            draw_text(&sMenuCurrDisplayList, SCREEN_WIDTH_HALF, yPos + 136, "Z: MODE    STICK: SEED",
+                      ALIGN_MIDDLE_CENTER);
         } else if (endless_perk_bananas() > 0) {
             draw_text(&sMenuCurrDisplayList, SCREEN_WIDTH_HALF, yPos + 120, endless_perk_text(), ALIGN_MIDDLE_CENTER);
         }
@@ -12100,28 +12130,32 @@ s32 menu_trophy_race_round_loop(s32 updateRate) {
     if ((gIgnorePlayerInputTime == 0) && (gMenuDelay == 0)) {
         menu_input();
         // ENDLESS: on the first round only, Z switches between Survival and
-        // Time Attack and the shoulder buttons walk the seed, so a run can be
-        // handed to someone else to race. Once a run is underway both are
-        // locked in.
+        // Time Attack, and the stick dials in a seed one digit at a time so a
+        // specific run can be typed in rather than counted up to. Once a run is
+        // underway both are locked in.
         if (endless_is_active() && endless_round() == 0) {
             if ((gMenuButtons[PLAYER_MENU] & Z_TRIG) != 0) {
                 endless_toggle_time_attack();
                 sound_play(SOUND_MENU_PICK2, NULL);
             }
-            // L moves in hundreds so a four digit seed is reachable. The whole
-            // screen is rebuilt afterwards because the first track was already
-            // drawn from the old seed -- without this the name and the preview
-            // behind it would describe a race the new seed is not going to run.
-            if ((gMenuButtons[PLAYER_MENU] & (L_TRIG | R_TRIG)) != 0) {
-                if (gMenuButtons[PLAYER_MENU] & L_TRIG) {
-                    endless_set_seed(endless_seed() + 100);
-                } else {
-                    endless_set_seed(endless_seed() + 1);
-                }
+            if (gMenuStickX[PLAYER_MENU] != 0) {
+                endless_seed_move_digit(gMenuStickX[PLAYER_MENU] > 0 ? 1 : -1);
                 sound_play(SOUND_MENU_PICK2, NULL);
-                trophyround_free();
-                menu_init(MENU_TROPHY_RACE_ROUND);
-                return MENU_RESULT_CONTINUE;
+            }
+            if (gMenuStickY[PLAYER_MENU] != 0) {
+                endless_seed_change_digit(gMenuStickY[PLAYER_MENU] > 0 ? 1 : -1);
+                // The track the new seed draws takes effect at once, so the
+                // screen never names a race the seed is not going to run.
+                //
+                // The scenery behind the text is deliberately left alone. It is
+                // loaded with load_level_for_menu, which stops the menu music
+                // -- that is why the init that opens this screen restarts the
+                // music straight after loading it. Reloading it per edit would
+                // mean cutting the music every time a digit turns, and the
+                // backdrop is only decoration: pressing A loads the real track
+                // either way.
+                trophyround_reseed_track();
+                sound_play(SOUND_MENU_PICK2, NULL);
             }
         }
         if ((gMenuButtons[PLAYER_MENU] & (A_BUTTON | START_BUTTON)) != 0) {

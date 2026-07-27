@@ -32,6 +32,8 @@ void endless_award_perk(void);
 s32 endless_perk_bananas(void);
 s32 endless_seed(void);
 void endless_set_seed(s32 seed);
+void endless_seed_move_digit(s32 delta);
+void endless_seed_change_digit(s32 delta);
 s32 endless_time_attack(void);
 void endless_toggle_time_attack(void);
 s32 endless_clock(void);
@@ -51,5 +53,7 @@ char *endless_best_text(void);
 char *endless_perk_text(void);
 char *endless_clock_text(void);
 char *endless_mode_text(void);
+char *endless_seed_prefix_text(void);
+char *endless_seed_digit_text(void);
 
 #endif

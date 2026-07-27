@@ -49,6 +49,7 @@
 
 // Seeds are four digits so they can be read out loud and typed back in.
 #define ENDLESS_SEED_MAX 9999
+#define ENDLESS_SEED_DIGITS 4
 
 // Where the run record lives in the EEPROM settings word. Bits 0-25 are the
 // vanilla flags (Adventure Two, Drumstick, language, T.T. course times,
@@ -92,8 +93,11 @@ static char sEndlessHudText[24];
 static char sEndlessBestText[32];
 static char sEndlessPerkText[32];
 static char sEndlessClockText[24];
-static char sEndlessModeText[32];
+static char sEndlessModeText[40];
+static char sEndlessSeedPrefix[40];
+static char sEndlessSeedDigitText[4];
 static s32 sEndlessLastTrack;
+static s32 sEndlessSeedDigit;
 static u32 sEndlessRngState;
 
 /******************************/
@@ -386,6 +390,50 @@ void endless_set_seed(s32 seed) {
     sEndlessLastTrack = -1;
 }
 
+/**
+ * Decimal weight of a seed digit, counting from the left.
+ */
+static s32 endless_digit_place(s32 index) {
+    switch (index) {
+        case 0:
+            return 1000;
+        case 1:
+            return 100;
+        case 2:
+            return 10;
+        default:
+            return 1;
+    }
+}
+
+void endless_seed_move_digit(s32 delta) {
+    sEndlessSeedDigit += delta;
+    while (sEndlessSeedDigit < 0) {
+        sEndlessSeedDigit += ENDLESS_SEED_DIGITS;
+    }
+    while (sEndlessSeedDigit >= ENDLESS_SEED_DIGITS) {
+        sEndlessSeedDigit -= ENDLESS_SEED_DIGITS;
+    }
+}
+
+/**
+ * Turn the selected digit, leaving the other three alone, so any seed can be
+ * dialled in directly instead of counted up to.
+ */
+void endless_seed_change_digit(s32 delta) {
+    s32 place = endless_digit_place(sEndlessSeedDigit);
+    s32 digit = (gEndlessSeed / place) % 10;
+    s32 wanted = digit + delta;
+
+    while (wanted < 0) {
+        wanted += 10;
+    }
+    while (wanted > 9) {
+        wanted -= 10;
+    }
+    endless_set_seed(gEndlessSeed + ((wanted - digit) * place));
+}
+
 s32 endless_time_attack(void) {
     return gEndlessTimeAttack;
 }
@@ -480,14 +528,57 @@ char *endless_clock_text(void) {
  */
 char *endless_mode_text(void) {
     char *end;
+    s32 digit;
+    s32 i;
 
     if (gEndlessTimeAttack) {
         end = endless_append_string(sEndlessModeText, "TIME ATTACK   SEED ");
     } else {
         end = endless_append_string(sEndlessModeText, "SURVIVAL   SEED ");
     }
-    endless_append_number(end, gEndlessSeed);
+    // Leading zeroes are kept so the digits never shift under the cursor.
+    for (i = 0; i < ENDLESS_SEED_DIGITS; i++) {
+        digit = (gEndlessSeed / endless_digit_place(i)) % 10;
+        *end++ = (char) ('0' + digit);
+    }
+    *end = '\0';
     return sEndlessModeText;
+}
+
+/**
+ * The mode line truncated just before the digit being edited, and that digit on
+ * its own. Measuring these two gives the digit's position within the centred
+ * line, which is how the cursor gets drawn: there is no glyph for it, because
+ * the only bracket-like characters in this font live on a page that is not
+ * loaded here and come out blank.
+ */
+char *endless_seed_prefix_text(void) {
+    char *full = endless_mode_text();
+    s32 length = 0;
+    s32 i;
+
+    while (full[length] != '\0') {
+        length++;
+    }
+    // The seed is the last ENDLESS_SEED_DIGITS characters of the line, so
+    // dropping the digits at and after the cursor leaves the prefix.
+    length -= ENDLESS_SEED_DIGITS - sEndlessSeedDigit;
+    if (length < 0) {
+        length = 0;
+    }
+    for (i = 0; i < length; i++) {
+        sEndlessSeedPrefix[i] = full[i];
+    }
+    sEndlessSeedPrefix[i] = '\0';
+    return sEndlessSeedPrefix;
+}
+
+char *endless_seed_digit_text(void) {
+    s32 digit = (gEndlessSeed / endless_digit_place(sEndlessSeedDigit)) % 10;
+
+    sEndlessSeedDigitText[0] = (char) ('0' + digit);
+    sEndlessSeedDigitText[1] = '\0';
+    return sEndlessSeedDigitText;
 }
 
 /**
