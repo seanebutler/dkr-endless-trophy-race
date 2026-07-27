@@ -12033,6 +12033,11 @@ void trophyround_render(UNUSED s32 updateRate) {
         set_text_font(ASSET_FONTS_FUNFONT);
         draw_text(&sMenuCurrDisplayList, SCREEN_WIDTH_HALF, yPos + 176, endless_round_text(), ALIGN_MIDDLE_CENTER);
         draw_text(&sMenuCurrDisplayList, SCREEN_WIDTH_HALF, yPos + 144, endless_goal_text(), ALIGN_MIDDLE_CENTER);
+        // Only at the start of a run: what there is to beat. Repeating it every
+        // round would just be noise once the run is underway.
+        if (endless_round() == 0) {
+            draw_text(&sMenuCurrDisplayList, SCREEN_WIDTH_HALF, yPos + 112, endless_best_text(), ALIGN_MIDDLE_CENTER);
+        }
         set_text_font(ASSET_FONTS_BIGFONT);
     } else {
         draw_text(&sMenuCurrDisplayList, SCREEN_WIDTH_HALF, yPos + 176,
@@ -12348,6 +12353,13 @@ void rankings_render_order(s32 updateRate) {
         draw_text(&sMenuCurrDisplayList, SCREEN_WIDTH_HALF, 16, headline, ALIGN_MIDDLE_CENTER);
         set_text_colour(255, 255, 255, 0, 255);
         draw_text(&sMenuCurrDisplayList, SCREEN_WIDTH_HALF, 32, endless_score_text(), ALIGN_MIDDLE_CENTER);
+        // The run is over -- show the record it was measured against.
+        if (!survived) {
+            set_text_colour(0, 0, 0, 255, 128);
+            draw_text(&sMenuCurrDisplayList, SCREEN_WIDTH_HALF + 1, 49, endless_best_text(), ALIGN_MIDDLE_CENTER);
+            set_text_colour(255, 224, 96, 0, 255);
+            draw_text(&sMenuCurrDisplayList, SCREEN_WIDTH_HALF, 48, endless_best_text(), ALIGN_MIDDLE_CENTER);
+        }
     }
 }
 
@@ -12445,9 +12457,13 @@ s32 menu_trophy_race_rankings_loop(s32 updateRate) {
                 // position -> the run is over, back to the track select menu.
                 if (endless_is_active()) {
                     if (endless_player_survived()) {
+                        // Recorded per round, so the run still counts towards
+                        // the save record if the console is reset mid-run.
+                        endless_record_run(endless_round() + 1);
                         endless_advance_round();
                         menu_init(MENU_TROPHY_RACE_ROUND);
                     } else {
+                        endless_record_run(endless_round());
                         endless_stop();
                         gTrophyRaceWorldId = 0;
                         menu_init(MENU_TRACK_SELECT);

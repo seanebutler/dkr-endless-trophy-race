@@ -29,6 +29,15 @@
 #define ENDLESS_MIRROR_CHANCE_ROUND 8  // Rounds with a coin-flip mirror.
 #define ENDLESS_MIRROR_ALWAYS_ROUND 12 // Every race mirrored from here on.
 
+// Where the run record lives in the EEPROM settings word. Bits 0-25 are the
+// vanilla flags (Adventure Two, Drumstick, language, T.T. course times,
+// subtitles) and write_eeprom_settings reserves bits 56-63 for its checksum,
+// which leaves 26-55 unused. Nothing here can reach these ceilings in practice.
+#define ENDLESS_SAVE_ROUNDS_SHIFT 32
+#define ENDLESS_SAVE_ROUNDS_MASK ((u64) 0x3FF) // 10 bits, up to 1023 rounds
+#define ENDLESS_SAVE_SCORE_SHIFT 42
+#define ENDLESS_SAVE_SCORE_MASK ((u64) 0x3FFF) // 14 bits, up to 16383 points
+
 // Layout of ASSET_MISC_TRACKS_MENU_IDS: one row of 6 entries per world, the
 // first 4 being races and the last 2 the trophy race and battle arena.
 #define ENDLESS_WORLD_COUNT 5
@@ -55,6 +64,7 @@ static char sEndlessRoundText[16];
 static char sEndlessScoreText[24];
 static char sEndlessGoalText[24];
 static char sEndlessHudText[24];
+static char sEndlessBestText[32];
 static s32 sEndlessLastTrack;
 
 /******************************/
@@ -326,20 +336,80 @@ char *endless_round_text(void) {
 }
 
 /**
- * Total points held by human players, shown on the rankings screen.
+ * Total points held by human players.
  */
-char *endless_score_text(void) {
+s32 endless_score(void) {
     Settings *settings = get_settings();
     s32 score = 0;
     s32 i;
-    char *end;
 
     for (i = 0; i < get_number_of_active_players(); i++) {
         score += settings->racers[i].trophy_points;
     }
-    end = endless_append_string(sEndlessScoreText, "SCORE ");
-    endless_append_number(end, score);
+    return score;
+}
+
+char *endless_score_text(void) {
+    char *end = endless_append_string(sEndlessScoreText, "SCORE ");
+
+    endless_append_number(end, endless_score());
     return sEndlessScoreText;
+}
+
+s32 endless_best_rounds(void) {
+    return (s32) ((get_eeprom_settings() >> ENDLESS_SAVE_ROUNDS_SHIFT) & ENDLESS_SAVE_ROUNDS_MASK);
+}
+
+s32 endless_best_score(void) {
+    return (s32) ((get_eeprom_settings() >> ENDLESS_SAVE_SCORE_SHIFT) & ENDLESS_SAVE_SCORE_MASK);
+}
+
+/**
+ * Store this run if it beat the saved one. Rounds are the headline record, so
+ * a deeper run always wins; the score only breaks ties between equally deep
+ * runs, which stops a high-scoring short run from masking a longer one.
+ *
+ * Called after every cleared round rather than only at the end, so a run still
+ * counts if the console is reset or the player quits out mid-run.
+ */
+void endless_record_run(s32 roundsCleared) {
+    s32 score = endless_score();
+    s32 bestRounds = endless_best_rounds();
+    s32 bestScore = endless_best_score();
+
+    if (roundsCleared < bestRounds || (roundsCleared == bestRounds && score <= bestScore)) {
+        return;
+    }
+    if (roundsCleared > (s32) ENDLESS_SAVE_ROUNDS_MASK) {
+        roundsCleared = (s32) ENDLESS_SAVE_ROUNDS_MASK;
+    }
+    if (score > (s32) ENDLESS_SAVE_SCORE_MASK) {
+        score = (s32) ENDLESS_SAVE_SCORE_MASK;
+    }
+
+    // The setter only ORs bits, so each field is cleared before being written.
+    unset_eeprom_settings_value(ENDLESS_SAVE_ROUNDS_MASK << ENDLESS_SAVE_ROUNDS_SHIFT);
+    unset_eeprom_settings_value(ENDLESS_SAVE_SCORE_MASK << ENDLESS_SAVE_SCORE_SHIFT);
+    set_eeprom_settings_value(((u64) roundsCleared) << ENDLESS_SAVE_ROUNDS_SHIFT);
+    set_eeprom_settings_value(((u64) score) << ENDLESS_SAVE_SCORE_SHIFT);
+}
+
+/**
+ * The record to beat, for the first round's intro and the game over screen.
+ */
+char *endless_best_text(void) {
+    char *end;
+
+    if (endless_best_rounds() == 0) {
+        endless_append_string(sEndlessBestText, "NO RECORD YET");
+        return sEndlessBestText;
+    }
+    end = endless_append_string(sEndlessBestText, "BEST ");
+    end = endless_append_number(end, endless_best_rounds());
+    end = endless_append_string(end, " ROUNDS  ");
+    end = endless_append_number(end, endless_best_score());
+    endless_append_string(end, " PTS");
+    return sEndlessBestText;
 }
 
 char *endless_goal_text(void) {
