@@ -72,6 +72,11 @@
 #define ENDLESS_BOUNTY_BANANAS 10      // The human banana cap, so this is the biggest head start available.
 #define ENDLESS_BOUNTY_TA_SECONDS 20   // Time Attack pays in clock instead.
 
+// Every card maps to a magic code the game already implements and tests. Two
+// obvious candidates are deliberately absent: CHEAT_HIGH_SPEED_RACING is
+// declared but read nowhere in the ROM, so it would announce a rule and change
+// nothing, and the banana-suppressing codes would quietly void a head start or
+// a coin bounty the player had just earned.
 typedef enum EndlessEvent {
     ENDLESS_EVENT_NONE,
     ENDLESS_EVENT_NO_WEAPONS,
@@ -79,6 +84,13 @@ typedef enum EndlessEvent {
     ENDLESS_EVENT_BOOST_BALLOONS,
     ENDLESS_EVENT_SHIELD_BALLOONS,
     ENDLESS_EVENT_MAX_POWER,
+    ENDLESS_EVENT_ROCKETS,
+    ENDLESS_EVENT_MAGNETS,
+    ENDLESS_EVENT_RAINBOW,
+    ENDLESS_EVENT_BANANA_HOARD,
+    ENDLESS_EVENT_FOUR_WHEEL_DRIVE,
+    ENDLESS_EVENT_BIG_RACERS,
+    ENDLESS_EVENT_SMALL_RACERS,
     ENDLESS_EVENT_COUNT
 } EndlessEvent;
 
@@ -740,6 +752,20 @@ s32 endless_event_cheats(void) {
             return CHEAT_ALL_BALLOONS_ARE_YELLOW;
         case ENDLESS_EVENT_MAX_POWER:
             return CHEAT_MAXIMUM_POWER_UP;
+        case ENDLESS_EVENT_ROCKETS:
+            return CHEAT_ALL_BALLOONS_ARE_RED;
+        case ENDLESS_EVENT_MAGNETS:
+            return CHEAT_ALL_BALLOONS_ARE_GREEN;
+        case ENDLESS_EVENT_RAINBOW:
+            return CHEAT_ALL_BALLOONS_ARE_RAINBOW;
+        case ENDLESS_EVENT_BANANA_HOARD:
+            return CHEAT_NO_LIMIT_TO_BANANAS;
+        case ENDLESS_EVENT_FOUR_WHEEL_DRIVE:
+            return CHEAT_FOUR_WHEEL_DRIVER;
+        case ENDLESS_EVENT_BIG_RACERS:
+            return CHEAT_BIG_CHARACTERS;
+        case ENDLESS_EVENT_SMALL_RACERS:
+            return CHEAT_SMALL_CHARACTERS;
         default:
             return 0;
     }
@@ -757,6 +783,20 @@ char *endless_event_text(void) {
             return "EVENT  SHIELD BALLOONS";
         case ENDLESS_EVENT_MAX_POWER:
             return "EVENT  MAX POWER";
+        case ENDLESS_EVENT_ROCKETS:
+            return "EVENT  ROCKETS ONLY";
+        case ENDLESS_EVENT_MAGNETS:
+            return "EVENT  MAGNETS ONLY";
+        case ENDLESS_EVENT_RAINBOW:
+            return "EVENT  RAINBOW BALLOONS";
+        case ENDLESS_EVENT_BANANA_HOARD:
+            return "EVENT  NO BANANA LIMIT";
+        case ENDLESS_EVENT_FOUR_WHEEL_DRIVE:
+            return "EVENT  FOUR WHEEL DRIVE";
+        case ENDLESS_EVENT_BIG_RACERS:
+            return "EVENT  BIG RACERS";
+        case ENDLESS_EVENT_SMALL_RACERS:
+            return "EVENT  SMALL RACERS";
         default:
             return "";
     }

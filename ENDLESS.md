@@ -36,9 +36,18 @@ every hit, so it is a burst of speed the escalating AI immediately starts
 taking back rather than an edge that snowballs.
 
 **Gauntlet** adds two seeded rule layers on top of the base run. Every round is
-assigned a vehicle, and every fourth race adds a rule from a five-card deck: no
-weapons, no zippers, boost balloons only, shield balloons only, or
-maximum-power pickups.
+assigned a vehicle, and every fourth race adds a rule from a twelve-card deck:
+no weapons, no zippers, four wheel drive, no banana limit, big racers, small
+racers, or one of the balloon rules — boost, shield, rockets, magnets, rainbow,
+or maximum power.
+
+Every card maps to a magic code the game already implements, and each one
+displaces its whole family for that race, the way the codes menu treats them,
+so an event never stacks with a code the player set into a combination neither
+chose. Two obvious candidates are deliberately missing: `CHEAT_HIGH_SPEED_RACING`
+is declared but read nowhere in the ROM, so it would announce a rule and change
+nothing, and the banana-suppressing codes would quietly void a head start or
+coin bounty the player had just earned.
 
 The vehicle is drawn from the game's own per-track vehicle mask — the same data
 the track select menu greys its icons with — so an illegal pairing is not

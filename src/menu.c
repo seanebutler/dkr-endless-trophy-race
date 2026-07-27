@@ -13988,10 +13988,19 @@ void set_magic_code_flags(s32 flags) {
       CHEAT_ALL_BALLOONS_ARE_GREEN | CHEAT_ALL_BALLOONS_ARE_BLUE | CHEAT_ALL_BALLOONS_ARE_YELLOW |               \
       CHEAT_ALL_BALLOONS_ARE_RAINBOW)
 
+// The magic codes an event borrows come in mutually exclusive families, the
+// same ones the codes menu enforces. An event has to displace its whole family
+// for the race, or it would stack with a code the player set and produce a
+// combination neither of them chose.
 #define ENDLESS_EVENT_POWERUP_CHEATS                                                                            \
     (CHEAT_DISABLE_WEAPONS | CHEAT_ALL_BALLOONS_ARE_RED | CHEAT_ALL_BALLOONS_ARE_GREEN |                       \
      CHEAT_ALL_BALLOONS_ARE_BLUE | CHEAT_ALL_BALLOONS_ARE_YELLOW | CHEAT_ALL_BALLOONS_ARE_RAINBOW |           \
      CHEAT_MAXIMUM_POWER_UP)
+
+#define ENDLESS_EVENT_BANANA_CHEATS                                                                             \
+    (CHEAT_DISABLE_BANANAS | CHEAT_BANANAS_REDUCE_SPEED | CHEAT_NO_LIMIT_TO_BANANAS)
+
+#define ENDLESS_EVENT_SIZE_CHEATS (CHEAT_BIG_CHARACTERS | CHEAT_SMALL_CHARACTERS)
 
 /**
  * Filters active cheats based on different conditions. Also enables mirroring for Adventure 2.
@@ -14022,6 +14031,12 @@ s32 get_filtered_cheats(void) {
         eventCheats = endless_event_cheats();
         if (eventCheats & ENDLESS_EVENT_POWERUP_CHEATS) {
             cheats &= ~ENDLESS_EVENT_POWERUP_CHEATS;
+        }
+        if (eventCheats & ENDLESS_EVENT_BANANA_CHEATS) {
+            cheats &= ~ENDLESS_EVENT_BANANA_CHEATS;
+        }
+        if (eventCheats & ENDLESS_EVENT_SIZE_CHEATS) {
+            cheats &= ~ENDLESS_EVENT_SIZE_CHEATS;
         }
         cheats |= eventCheats;
     }
