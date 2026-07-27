@@ -29,6 +29,12 @@
 #define ENDLESS_MIRROR_CHANCE_ROUND 8  // Rounds with a coin-flip mirror.
 #define ENDLESS_MIRROR_ALWAYS_ROUND 12 // Every race mirrored from here on.
 
+// Head start for the next round, by how well this one finished. The human
+// banana cap is 10, so even a win leaves plenty of room to collect more.
+#define ENDLESS_PERK_FIRST 5
+#define ENDLESS_PERK_SECOND 3
+#define ENDLESS_PERK_THIRD 2
+
 // Where the run record lives in the EEPROM settings word. Bits 0-25 are the
 // vanilla flags (Adventure Two, Drumstick, language, T.T. course times,
 // subtitles) and write_eeprom_settings reserves bits 56-63 for its checksum,
@@ -51,6 +57,7 @@ s32 gEndlessRound = 0;
 s32 gEndlessTrackId = -1;
 s32 gEndlessTrackWorld = 1;
 s32 gEndlessMirrorThisRace = FALSE;
+s32 gEndlessPerkBananas = 0;
 
 /*******************************/
 
@@ -65,6 +72,7 @@ static char sEndlessScoreText[24];
 static char sEndlessGoalText[24];
 static char sEndlessHudText[24];
 static char sEndlessBestText[32];
+static char sEndlessPerkText[32];
 static s32 sEndlessLastTrack;
 
 /******************************/
@@ -165,6 +173,7 @@ void endless_start(void) {
     gEndlessTrackId = -1;
     gEndlessTrackWorld = 1;
     gEndlessMirrorThisRace = FALSE;
+    gEndlessPerkBananas = 0;
     sEndlessLastTrack = -1;
     endless_build_pool();
     endless_shuffle_pool();
@@ -251,10 +260,10 @@ s32 endless_required_position(void) {
 }
 
 /**
- * TRUE if the best-placed human met this round's required position.
+ * Finishing position of the best-placed human in the race just run, 0 = first.
  * starting_position holds the finish position of the last race.
  */
-s32 endless_player_survived(void) {
+static s32 endless_best_finish(void) {
     Settings *settings = get_settings();
     s32 best = 99;
     s32 i;
@@ -264,7 +273,55 @@ s32 endless_player_survived(void) {
             best = settings->racers[i].starting_position;
         }
     }
-    return best <= endless_required_position();
+    return best;
+}
+
+/**
+ * TRUE if the best-placed human met this round's required position.
+ */
+s32 endless_player_survived(void) {
+    return endless_best_finish() <= endless_required_position();
+}
+
+/**
+ * Turn the finish just achieved into a head start for the next round.
+ *
+ * Bananas are the right currency for this: they raise top speed, they are
+ * lost on every hit, and they do not carry past the race. So a strong finish
+ * buys a burst of speed that the escalating AI immediately starts taking back,
+ * rather than a permanent advantage that would snowball.
+ */
+void endless_award_perk(void) {
+    switch (endless_best_finish()) {
+        case 0:
+            gEndlessPerkBananas = ENDLESS_PERK_FIRST;
+            break;
+        case 1:
+            gEndlessPerkBananas = ENDLESS_PERK_SECOND;
+            break;
+        case 2:
+            gEndlessPerkBananas = ENDLESS_PERK_THIRD;
+            break;
+        default:
+            gEndlessPerkBananas = 0;
+            break;
+    }
+}
+
+s32 endless_perk_bananas(void) {
+    return gEndlessPerkBananas;
+}
+
+/**
+ * Names the head start on the round intro so it does not look like a glitch
+ * when the player starts a race already holding bananas.
+ */
+char *endless_perk_text(void) {
+    char *end = endless_append_string(sEndlessPerkText, "HEAD START  ");
+
+    end = endless_append_number(end, gEndlessPerkBananas);
+    endless_append_string(end, " BANANAS");
+    return sEndlessPerkText;
 }
 
 s32 endless_mirrored(void) {

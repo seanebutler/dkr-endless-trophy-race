@@ -7,6 +7,7 @@
 #include "audio_vehicle.h"
 #include "audiosfx.h"
 #include "camera.h"
+#include "endless.h"
 #include "fade_transition.h"
 #include "game.h"
 #include "game_text.h"
@@ -1343,6 +1344,12 @@ void track_setup_racers(Vehicle vehicle, u32 entranceID, s32 playerCount) {
                 if (curRacer->playerIndex != PLAYER_COMPUTER) {
                     curRacer->bananas = 10;
                 }
+            }
+            // ENDLESS: head start earned by the previous round's finish. Never
+            // lowers what the banana cheat already granted.
+            if (endless_is_active() && raceType == RACETYPE_DEFAULT && curRacer->playerIndex != PLAYER_COMPUTER &&
+                curRacer->bananas < endless_perk_bananas()) {
+                curRacer->bananas = endless_perk_bananas();
             }
             if ((gameMode != GAMEMODE_MENU || D_8011AD3C == 2) && vehicle < VEHICLE_BOSSES) {
                 curRacer->vehicleSound = racer_sound_init(curRacer->characterId, curRacer->vehicleID);

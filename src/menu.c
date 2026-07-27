@@ -12033,10 +12033,13 @@ void trophyround_render(UNUSED s32 updateRate) {
         set_text_font(ASSET_FONTS_FUNFONT);
         draw_text(&sMenuCurrDisplayList, SCREEN_WIDTH_HALF, yPos + 176, endless_round_text(), ALIGN_MIDDLE_CENTER);
         draw_text(&sMenuCurrDisplayList, SCREEN_WIDTH_HALF, yPos + 144, endless_goal_text(), ALIGN_MIDDLE_CENTER);
-        // Only at the start of a run: what there is to beat. Repeating it every
-        // round would just be noise once the run is underway.
+        // At the start of a run, what there is to beat; after that, whatever
+        // head start the last round earned. Repeating the record every round
+        // would just be noise once the run is underway.
         if (endless_round() == 0) {
             draw_text(&sMenuCurrDisplayList, SCREEN_WIDTH_HALF, yPos + 112, endless_best_text(), ALIGN_MIDDLE_CENTER);
+        } else if (endless_perk_bananas() > 0) {
+            draw_text(&sMenuCurrDisplayList, SCREEN_WIDTH_HALF, yPos + 112, endless_perk_text(), ALIGN_MIDDLE_CENTER);
         }
         set_text_font(ASSET_FONTS_BIGFONT);
     } else {
@@ -12460,6 +12463,7 @@ s32 menu_trophy_race_rankings_loop(s32 updateRate) {
                         // Recorded per round, so the run still counts towards
                         // the save record if the console is reset mid-run.
                         endless_record_run(endless_round() + 1);
+                        endless_award_perk();
                         endless_advance_round();
                         menu_init(MENU_TROPHY_RACE_ROUND);
                     } else {
