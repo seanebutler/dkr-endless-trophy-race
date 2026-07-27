@@ -21,25 +21,51 @@ changes, and the game data has to come from your own cartridge dump.
 
 Pick **Tracks mode → the Trophy Race column** (always unlocked in this hack).
 
-- Every round draws a random track from a shuffle bag covering all 20 races
-  across all five worlds, Future Fun Land included; each track appears once
-  before any repeats.
-- **Survive** by meeting the round's required finish position. It tightens as
-  you go: top 4 (rounds 1-3) → top 3 (4-6) → top 2 (7-9) → **1st only** (10+).
-  Miss it once and the run ends.
-- **The AI escalates every single round.** The behaviour table climbs from
-  table 2 to the bank's maximum (9), one step per round. Past that the loaded
-  table itself is scaled: the AI's speed bonus rises +0.125 "virtual bananas"
-  per round (capped at +4.0, near human parity so skill still decides races)
-  and its boost/item/weapon aggression rises 2% per round.
-- **Mirrored tracks** arrive as a coin flip from round 9, and every race from
-  round 13.
-- Points accumulate across the whole run using the trophy scoring table
-  (9/7/5/3/1 for the top five). The rankings screen after each race shows the
-  round, your running score, and whether you survived.
+Every round draws a random track from a shuffle bag covering all 20 races
+across all five worlds, Future Fun Land included; each track appears once
+before any repeats. **The AI escalates every single round** — its behaviour
+table climbs from table 2 to the bank's maximum, one step per round, and past
+that the table itself is scaled: speed rises +0.125 "virtual bananas" per round
+(capped at +4.0, near human parity so skill still decides races) and
+boost/item/weapon aggression rises 2% per round. **Mirrored tracks** arrive as
+a coin flip from round 9, and every race from round 13.
+
+A strong finish buys a **head start** in the next round: five bananas for a
+win, three for second, two for third. Bananas raise top speed and are lost on
+every hit, so it is a burst of speed the escalating AI immediately starts
+taking back rather than an edge that snowballs.
+
+Your round and what you need are on the HUD the whole race, turning red the
+moment you drop out of it.
+
+### Two ways to lose
+
+Press **Z** on the first round's intro to switch; the choice locks once the run
+is underway.
+
+- **Survival** — meet the round's required finish position or the run ends.
+  It tightens as you go: top 4 (rounds 1-3) → top 3 (4-6) → top 2 (7-9) →
+  **1st only** (10+).
+- **Time Attack** — placement never ends the run. Instead every race is settled
+  against a three-minute run clock, refunded as a share of that race's own
+  duration: winning buys 30% back, fourth costs 10%, trailing costs 25%. The
+  run ends when the clock empties. The refund is a percentage rather than a
+  fixed number of seconds so the rule reads the same on Ancient Lake and on
+  Spaceport Alpha.
+
+### Records and seeds
+
+Points accumulate all run using the trophy scoring table (9/7/5/3/1). Your best
+run is saved to the cartridge and shown on the first round's intro and on the
+game over screen — rounds are the headline record, and score only breaks ties
+between equally deep runs.
+
+Every run has a four-digit **seed** that fully determines its track order and
+mirror rolls, so a run can be handed to someone else to race. Change it with
+**L** (±100) and **R** (±1) on the first round's intro.
 
 Adventure-mode trophy races are untouched and still play the vanilla four-round
-format.
+format. T.T. is on the roster from the start.
 
 ## How it works
 
@@ -56,12 +82,17 @@ Integration points are all marked with an `// ENDLESS` comment:
 | `menu.c` `menu_track_select_loop` | Trophy column starts a run (`endless_start`) |
 | `menu.c` `trackmenu_assets` | Trophy column force-unlocked |
 | `menu.c` `menu_trophy_race_round_init` | Draws the next track from the shuffle bag |
-| `menu.c` `trophyround_render` | Round + goal text on the intro screen |
-| `menu.c` `rankings_render_order` | Round / score / GAME OVER overlay |
-| `menu.c` `menu_trophy_race_rankings_loop` | Survive → next round, miss → run over |
+| `menu.c` `trophyround_render` | Title, mode, seed, record, goal/clock, round |
+| `menu.c` `menu_trophy_race_round_loop` | Z switches mode, L/R walk the seed |
+| `menu.c` `menu_trophy_race_rankings_init` | Settles the finished round; sets options |
+| `menu.c` `rankings_render_order` | Round / score / clock / GAME OVER overlay |
+| `menu.c` `menu_trophy_race_rankings_loop` | Continue to next round, or end the run |
 | `menu.c` `get_filtered_cheats` | Mirrored tracks at high rounds |
+| `menu.c` `is_tt_unlocked` | T.T. available from the start |
 | `menu.c` `trophyround_adventure`, pause quit, file select | Clear mode state |
 | `game.c` `aitable_init` | AI behaviour table ramp + post-load table scaling |
+| `game_ui.c` `hud_render_general` | In-race status line |
+| `objects.c` `track_setup_racers` | Applies the banana head start |
 
 ## Building
 
@@ -73,7 +104,8 @@ own [README](README.md) — Linux, WSL2, or macOS.
 make NON_MATCHING=1 -j$(nproc)
 ```
 
-Output is `build/dkr.us.v77.z64`.
+Output is `build/dkr.us.v77.z64`. `./make-patch.sh` turns that into a
+distributable BPS patch, and refuses to emit one it cannot verify.
 
 Two things worth knowing:
 
@@ -86,29 +118,35 @@ Two things worth knowing:
   anti-tamper checks into the hacked ROM, which booby-traps it (black screen or
   a permanently paused game).
 
-Distribute as an xdelta/BPS patch against the vanilla ROM — never the ROM
-itself. The decomp is CC0; the game is not.
-
 ## Tuning
 
-Constants at the top of `src/endless.c`:
-
-| Constant | Meaning |
-| --- | --- |
-| `ENDLESS_AI_BASE_TABLE` | Behaviour table used in round 1 |
-| `ENDLESS_HEAT_START_ROUND` | When direct table scaling begins |
-| `ENDLESS_SPEED_PER_HEAT` | AI speed bonus added per round past that |
-| `ENDLESS_SPEED_BONUS_CAP` | Ceiling on that bonus (human banana cap is 10) |
-| `ENDLESS_CHANCE_PER_HEAT` | AI action-chance percent added per round |
-| `ENDLESS_MIRROR_CHANCE_ROUND` / `_ALWAYS_ROUND` | Mirroring schedule |
-
-`endless_required_position()` holds the placement schedule.
+Constants at the top of `src/endless.c` cover the AI ramp, the mirroring
+schedule, the head start sizes, and the Time Attack clock and refunds.
+`endless_required_position()` holds the Survival placement schedule.
 
 ## Notes on the vanilla code
 
+These cost real time to find, so they are written down rather than rediscovered:
+
 - The big menu font (`ASSET_FONTS_BIGFONT`) has **no digit glyphs** — every
   number in this mode is drawn with `ASSET_FONTS_FUNFONT` for that reason.
-- Lap counts are deliberately left alone. Raising a track above 3 laps
-  overruns `Racer.lap_times` (a `u16[3]`) in the end-of-race copy in
-  `objects.c`, which corrupts the adjacent racer's `trophy_points` — the very
-  field this mode uses for scoring.
+- FUNFONT's glyphs carry their own colours, so tinting text needs the fourth
+  argument of `set_text_colour` (how much the flat colour replaces the texture)
+  to read at all.
+- Lap counts are deliberately left alone. Raising a track above 3 laps overruns
+  `Racer.lap_times` (a `u16[3]`) in the end-of-race copy in `objects.c`, which
+  corrupts the adjacent racer's `trophy_points` — the very field this mode uses
+  for scoring.
+- The EEPROM settings word has room to spare: bits 0-25 are the vanilla flags
+  and `write_eeprom_settings` reserves 56-63 for its checksum, leaving 26-55
+  free. The run record lives at 32-55.
+- The vanilla rankings screen sets an option count of three while only filling
+  two entries, so a stale pointer gets drawn as a third option.
+
+## Not done yet
+
+- The intro screen's rows are full. Anything else shown there will need the
+  block re-laid-out again.
+- No leaderboard or ghost sharing beyond the seed.
+- Multiplayer is untested; the in-race status line is single-player only, since
+  it is positioned in screen coordinates.
