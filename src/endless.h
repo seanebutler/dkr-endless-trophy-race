@@ -59,7 +59,7 @@ char *endless_round_text(void);
 char *endless_score_text(void);
 char *endless_result_text(void);
 char *endless_result_detail_text(void);
-char *endless_goal_text(void);
+char *endless_intro_status_text(void);
 char *endless_hud_text(void);
 char *endless_best_text(void);
 char *endless_perk_text(void);

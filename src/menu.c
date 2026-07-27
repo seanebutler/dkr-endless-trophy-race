@@ -12047,29 +12047,31 @@ void trophyround_render(UNUSED s32 updateRate) {
     set_text_font(ASSET_FONTS_BIGFONT);
     // Text Shadows first
     set_text_colour(0, 0, 0, 255, 128);
-    draw_text(&sMenuCurrDisplayList, SCREEN_WIDTH_HALF + 1, 35, (char *) worldName, ALIGN_MIDDLE_CENTER);
-    draw_text(&sMenuCurrDisplayList, SCREEN_WIDTH_HALF + 1, 67, title, ALIGN_MIDDLE_CENTER);
+    if (!endless_is_active()) {
+        draw_text(&sMenuCurrDisplayList, SCREEN_WIDTH_HALF + 1, 35, (char *) worldName, ALIGN_MIDDLE_CENTER);
+    }
+    // ENDLESS: no world heading, and the title takes the space both used to
+    // share. A vanilla trophy race IS one world, so naming it is the event's
+    // identity; here tracks are drawn from every world, so the world is
+    // incidental and the track name at the bottom already says which one it is.
+    // Dropping it buys the run details a whole row of headroom.
+    draw_text(&sMenuCurrDisplayList, SCREEN_WIDTH_HALF + 1, endless_is_active() ? 51 : 67, title,
+              ALIGN_MIDDLE_CENTER);
     set_text_colour(255, 255, 255, 0, 255);
-    draw_text(&sMenuCurrDisplayList, SCREEN_WIDTH_HALF, 32, (char *) worldName, ALIGN_MIDDLE_CENTER);
-    draw_text(&sMenuCurrDisplayList, SCREEN_WIDTH_HALF, 64, title, ALIGN_MIDDLE_CENTER);
+    if (!endless_is_active()) {
+        draw_text(&sMenuCurrDisplayList, SCREEN_WIDTH_HALF, 32, (char *) worldName, ALIGN_MIDDLE_CENTER);
+    }
+    draw_text(&sMenuCurrDisplayList, SCREEN_WIDTH_HALF, endless_is_active() ? 48 : 64, title, ALIGN_MIDDLE_CENTER);
     if (endless_is_active()) {
         // FUNFONT has digit glyphs; BIGFONT is letters-only.
         set_text_font(ASSET_FONTS_FUNFONT);
-        draw_text(&sMenuCurrDisplayList, SCREEN_WIDTH_HALF, yPos + 176, endless_round_text(), ALIGN_MIDDLE_CENTER);
-        // Time Attack lives or dies by the clock, so the clock takes the line
-        // the placement requirement uses in Survival.
-        if (endless_time_attack()) {
-            draw_text(&sMenuCurrDisplayList, SCREEN_WIDTH_HALF, yPos + 152, endless_clock_text(), ALIGN_MIDDLE_CENTER);
-        } else {
-            draw_text(&sMenuCurrDisplayList, SCREEN_WIDTH_HALF, yPos + 152, endless_goal_text(), ALIGN_MIDDLE_CENTER);
-        }
-        // The run's setup, the record to beat, and how to change either -- but
-        // only before the run starts. Afterwards the block collapses to the
-        // head start the last round earned, since the rest is settled and
-        // repeating it every round would just be noise.
-        //
-        // These rows start clear of the BIGFONT title above them; adding
-        // another one here will start overlapping it.
+        // Round and requirement share a line rather than taking one each.
+        draw_text(&sMenuCurrDisplayList, SCREEN_WIDTH_HALF, yPos + 152, endless_intro_status_text(),
+                  ALIGN_MIDDLE_CENTER);
+        // Above that sits whatever is worth saying about this particular round:
+        // before the run starts, the rules, the record and how to change them;
+        // afterwards only what changed since the last race. Rows are spaced 24
+        // apart so the block reads as three separate facts rather than a wall.
         if (endless_round() == 0) {
             s32 lineWidth = get_text_width(endless_mode_text(), 0, 0);
             s32 prefixWidth = get_text_width(endless_seed_prefix_text(), 0, 0);
@@ -12083,10 +12085,13 @@ void trophyround_render(UNUSED s32 updateRate) {
             draw_text(&sMenuCurrDisplayList, (SCREEN_WIDTH_HALF - (lineWidth / 2)) + prefixWidth + (digitWidth / 2),
                       yPos + 104, endless_seed_digit_text(), ALIGN_MIDDLE_CENTER);
             set_text_colour(255, 255, 255, 0, 255);
-            draw_text(&sMenuCurrDisplayList, SCREEN_WIDTH_HALF, yPos + 120, endless_best_text(), ALIGN_MIDDLE_CENTER);
-            draw_text(&sMenuCurrDisplayList, SCREEN_WIDTH_HALF, yPos + 136,
-                      "Z:MODE  C-DOWN:EVENTS  STICK:SEED",
+            draw_text(&sMenuCurrDisplayList, SCREEN_WIDTH_HALF, yPos + 128, endless_best_text(), ALIGN_MIDDLE_CENTER);
+            // The controls sit apart from the run details, below the line they
+            // act on, so they read as a footnote rather than another fact.
+            set_text_colour(176, 176, 176, 96, 255);
+            draw_text(&sMenuCurrDisplayList, SCREEN_WIDTH_HALF, yPos + 176, "Z:MODE  C-DOWN:EVENTS  STICK:SEED",
                       ALIGN_MIDDLE_CENTER);
+            set_text_colour(255, 255, 255, 0, 255);
         } else {
             if (endless_event_active()) {
                 set_text_colour(255, 224, 64, 200, 255);
@@ -12095,7 +12100,7 @@ void trophyround_render(UNUSED s32 updateRate) {
                 set_text_colour(255, 255, 255, 0, 255);
             }
             if (endless_perk_bananas() > 0) {
-                draw_text(&sMenuCurrDisplayList, SCREEN_WIDTH_HALF, yPos + 120, endless_perk_text(),
+                draw_text(&sMenuCurrDisplayList, SCREEN_WIDTH_HALF, yPos + 128, endless_perk_text(),
                           ALIGN_MIDDLE_CENTER);
             }
         }

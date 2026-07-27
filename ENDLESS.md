@@ -186,8 +186,9 @@ These cost real time to find, so they are written down rather than rediscovered:
 
 ## Not done yet
 
-- The intro screen's rows are full. Anything else shown there will need the
-  block re-laid-out again.
+- The intro screen has room again, but not much. It carries four rows of text
+  between the title and the track name, spaced so they read as separate facts;
+  a fifth would start crowding them back together.
 - No leaderboard or ghost sharing beyond the seed and run receipt.
 - Interface strings added by the hack are English-only until they move into the
   localized menu asset pipeline.

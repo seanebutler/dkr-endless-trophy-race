@@ -122,7 +122,7 @@ static s32 sEndlessPoolSize;
 static s32 sEndlessPoolCursor;
 static char sEndlessRoundText[16];
 static char sEndlessScoreText[24];
-static char sEndlessGoalText[24];
+static char sEndlessGoalText[40];
 static char sEndlessHudText[48];
 static char sEndlessBestText[32];
 static char sEndlessPerkText[32];
@@ -1039,13 +1039,23 @@ char *endless_result_detail_text(void) {
     return sEndlessResultDetailText;
 }
 
-char *endless_goal_text(void) {
-    char *end;
+/**
+ * Round and what it takes to survive it, on one line for the round intro.
+ * Separate from the in-race version because that one compacts itself to fit a
+ * quarter-screen viewport, while the intro always has the whole screen and can
+ * afford to spell the requirement out.
+ */
+char *endless_intro_status_text(void) {
+    char *end = endless_append_string(sEndlessGoalText, "ROUND ");
 
-    if (endless_required_position() == 0) {
-        endless_append_string(sEndlessGoalText, "FINISH 1ST");
+    end = endless_append_number(end, gEndlessRound + 1);
+    end = endless_append_string(end, "    ");
+    if (gEndlessTimeAttack) {
+        endless_append_string(end, endless_clock_text());
+    } else if (endless_required_position() == 0) {
+        endless_append_string(end, "FINISH 1ST");
     } else {
-        end = endless_append_string(sEndlessGoalText, "FINISH TOP ");
+        end = endless_append_string(end, "FINISH TOP ");
         endless_append_number(end, endless_required_position() + 1);
     }
     return sEndlessGoalText;
