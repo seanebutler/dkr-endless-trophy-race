@@ -12035,11 +12035,19 @@ void trophyround_render(UNUSED s32 updateRate) {
         // FUNFONT has digit glyphs; BIGFONT is letters-only.
         set_text_font(ASSET_FONTS_FUNFONT);
         draw_text(&sMenuCurrDisplayList, SCREEN_WIDTH_HALF, yPos + 176, endless_round_text(), ALIGN_MIDDLE_CENTER);
-        draw_text(&sMenuCurrDisplayList, SCREEN_WIDTH_HALF, yPos + 144, endless_goal_text(), ALIGN_MIDDLE_CENTER);
-        // At the start of a run, what there is to beat; after that, whatever
-        // head start the last round earned. Repeating the record every round
-        // would just be noise once the run is underway.
+        // Time Attack lives or dies by the clock, so the clock takes the line
+        // the placement requirement uses in Survival.
+        if (endless_time_attack()) {
+            draw_text(&sMenuCurrDisplayList, SCREEN_WIDTH_HALF, yPos + 144, endless_clock_text(), ALIGN_MIDDLE_CENTER);
+        } else {
+            draw_text(&sMenuCurrDisplayList, SCREEN_WIDTH_HALF, yPos + 144, endless_goal_text(), ALIGN_MIDDLE_CENTER);
+        }
+        // At the start of a run, the mode (which is also the only prompt for
+        // switching it) and the record to beat; after that, whatever head start
+        // the last round earned. Repeating the record every round would just be
+        // noise once the run is underway.
         if (endless_round() == 0) {
+            draw_text(&sMenuCurrDisplayList, SCREEN_WIDTH_HALF, yPos + 96, endless_mode_text(), ALIGN_MIDDLE_CENTER);
             draw_text(&sMenuCurrDisplayList, SCREEN_WIDTH_HALF, yPos + 112, endless_best_text(), ALIGN_MIDDLE_CENTER);
         } else if (endless_perk_bananas() > 0) {
             draw_text(&sMenuCurrDisplayList, SCREEN_WIDTH_HALF, yPos + 112, endless_perk_text(), ALIGN_MIDDLE_CENTER);
@@ -12087,6 +12095,12 @@ s32 menu_trophy_race_round_loop(s32 updateRate) {
     }
     if ((gIgnorePlayerInputTime == 0) && (gMenuDelay == 0)) {
         menu_input();
+        // ENDLESS: Z switches between Survival and Time Attack, but only on the
+        // first round -- once a run is underway the rules are locked in.
+        if (endless_is_active() && endless_round() == 0 && (gMenuButtons[PLAYER_MENU] & Z_TRIG) != 0) {
+            endless_toggle_time_attack();
+            sound_play(SOUND_MENU_PICK2, NULL);
+        }
         if ((gMenuButtons[PLAYER_MENU] & (A_BUTTON | START_BUTTON)) != 0) {
             transition_begin(&sMenuTransitionFadeIn);
             gMenuDelay = 1;
@@ -12225,12 +12239,17 @@ void menu_trophy_race_rankings_init(void) {
         } while (trackMenuIds[((gTrophyRaceWorldId - 1) * 6) + gTrophyRaceRound] == -1);
     }
 
-    // ENDLESS: one honest option. The vanilla branch below offers CONTINUE and
-    // QUIT TROPHY RACE (and counts three while only setting two, leaving a
-    // stale pointer to be drawn), but in this mode the choice does not exist:
+    // ENDLESS: settle the finished round once, here, so this screen and the
+    // exit branch that follows it agree on whether the run lived.
+    if (endless_is_active()) {
+        endless_round_finished();
+    }
+    // One honest option. The vanilla branch below offers CONTINUE and QUIT
+    // TROPHY RACE (and counts three while only setting two, leaving a stale
+    // pointer to be drawn), but in this mode the choice does not exist:
     // surviving always continues and failing always ends the run.
     if (endless_is_active()) {
-        if (endless_player_survived()) {
+        if (endless_run_continues()) {
             gResultOptionText[0] = gMenuText[ASSET_MENU_TEXT_CONTINUE];
         } else {
             gResultOptionText[0] = gMenuText[ASSET_MENU_TEXT_QUIT];
@@ -12349,7 +12368,7 @@ void rankings_render_order(s32 updateRate) {
     // ENDLESS: overlay the run status on the rankings screen.
     if (endless_is_active()) {
         char *headline;
-        s32 survived = endless_player_survived();
+        s32 survived = endless_run_continues();
 
         if (survived) {
             headline = endless_round_text();
@@ -12370,12 +12389,20 @@ void rankings_render_order(s32 updateRate) {
         draw_text(&sMenuCurrDisplayList, SCREEN_WIDTH_HALF, 16, headline, ALIGN_MIDDLE_CENTER);
         set_text_colour(255, 255, 255, 0, 255);
         draw_text(&sMenuCurrDisplayList, SCREEN_WIDTH_HALF, 32, endless_score_text(), ALIGN_MIDDLE_CENTER);
+        // In Time Attack the clock has just been settled against this race, so
+        // this is where the player finds out what the result cost or bought.
+        if (endless_time_attack()) {
+            draw_text(&sMenuCurrDisplayList, SCREEN_WIDTH_HALF, 48, endless_clock_text(), ALIGN_MIDDLE_CENTER);
+        }
         // The run is over -- show the record it was measured against.
         if (!survived) {
+            s32 bestY = endless_time_attack() ? 64 : 48;
+
             set_text_colour(0, 0, 0, 255, 128);
-            draw_text(&sMenuCurrDisplayList, SCREEN_WIDTH_HALF + 1, 49, endless_best_text(), ALIGN_MIDDLE_CENTER);
+            draw_text(&sMenuCurrDisplayList, SCREEN_WIDTH_HALF + 1, bestY + 1, endless_best_text(),
+                      ALIGN_MIDDLE_CENTER);
             set_text_colour(255, 224, 96, 0, 255);
-            draw_text(&sMenuCurrDisplayList, SCREEN_WIDTH_HALF, 48, endless_best_text(), ALIGN_MIDDLE_CENTER);
+            draw_text(&sMenuCurrDisplayList, SCREEN_WIDTH_HALF, bestY, endless_best_text(), ALIGN_MIDDLE_CENTER);
         }
     }
 }
@@ -12473,15 +12500,11 @@ s32 menu_trophy_race_rankings_loop(s32 updateRate) {
                 // ENDLESS: survive -> next round forever; miss the required
                 // position -> the run is over, back to the track select menu.
                 if (endless_is_active()) {
-                    if (endless_player_survived()) {
-                        // Recorded per round, so the run still counts towards
-                        // the save record if the console is reset mid-run.
-                        endless_record_run(endless_round() + 1);
-                        endless_award_perk();
+                    // The round was already settled when this screen opened.
+                    if (endless_run_continues()) {
                         endless_advance_round();
                         menu_init(MENU_TROPHY_RACE_ROUND);
                     } else {
-                        endless_record_run(endless_round());
                         endless_stop();
                         gTrophyRaceWorldId = 0;
                         menu_init(MENU_TRACK_SELECT);

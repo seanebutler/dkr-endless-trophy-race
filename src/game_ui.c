@@ -3352,10 +3352,14 @@ void hud_endless_status(Object **racers, s32 racerCount) {
     set_text_background_colour(0, 0, 0, 0);
     set_text_colour(0, 0, 0, 255, 255);
     draw_text(&gHudDL, gHudOffsetX + 9, yPos + 1, status, ALIGN_MIDDLE_LEFT);
+    // FUNFONT's glyphs carry their own colours, so the danger state overrides
+    // them hard (the fourth argument is how much the flat colour replaces the
+    // texture) while the safe state leaves the font looking normal. A subtle
+    // tint would not read at racing speed.
     if (endless_position_is_safe(racer->racePosition)) {
         set_text_colour(255, 255, 255, 0, 255);
     } else {
-        set_text_colour(255, 80, 80, 0, 255);
+        set_text_colour(255, 48, 48, 220, 255);
     }
     draw_text(&gHudDL, gHudOffsetX + 8, yPos, status, ALIGN_MIDDLE_LEFT);
     set_kerning(FALSE);

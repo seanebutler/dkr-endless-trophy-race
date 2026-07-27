@@ -30,6 +30,11 @@ s32 endless_position_is_safe(s32 racePosition);
 s32 endless_mirrored(void);
 void endless_award_perk(void);
 s32 endless_perk_bananas(void);
+s32 endless_time_attack(void);
+void endless_toggle_time_attack(void);
+s32 endless_clock(void);
+s32 endless_run_continues(void);
+void endless_round_finished(void);
 s32 endless_ai_level(s32 baseLevel);
 void endless_scale_ai_table(AIBehaviourTable *table);
 s32 endless_score(void);
@@ -42,5 +47,7 @@ char *endless_goal_text(void);
 char *endless_hud_text(void);
 char *endless_best_text(void);
 char *endless_perk_text(void);
+char *endless_clock_text(void);
+char *endless_mode_text(void);
 
 #endif

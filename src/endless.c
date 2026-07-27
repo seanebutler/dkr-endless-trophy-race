@@ -35,6 +35,18 @@
 #define ENDLESS_PERK_SECOND 3
 #define ENDLESS_PERK_THIRD 2
 
+// Time Attack. The run clock is settled after each race as a percentage of the
+// time that race took, which keeps the rule identical on a one-minute track and
+// a three-minute one -- an absolute bonus would make short tracks free time and
+// long ones a death sentence. Winning buys time, trailing bleeds it.
+#define ENDLESS_TA_START_SECONDS 180
+#define ENDLESS_TICKS_PER_SECOND 60
+#define ENDLESS_TA_PCT_FIRST 30
+#define ENDLESS_TA_PCT_SECOND 10
+#define ENDLESS_TA_PCT_THIRD 0
+#define ENDLESS_TA_PCT_FOURTH (-10)
+#define ENDLESS_TA_PCT_REST (-25)
+
 // Where the run record lives in the EEPROM settings word. Bits 0-25 are the
 // vanilla flags (Adventure Two, Drumstick, language, T.T. course times,
 // subtitles) and write_eeprom_settings reserves bits 56-63 for its checksum,
@@ -58,6 +70,8 @@ s32 gEndlessTrackId = -1;
 s32 gEndlessTrackWorld = 1;
 s32 gEndlessMirrorThisRace = FALSE;
 s32 gEndlessPerkBananas = 0;
+s32 gEndlessTimeAttack = FALSE; // Kept between runs: it is a preference.
+s32 gEndlessClock = 0;
 
 /*******************************/
 
@@ -73,6 +87,8 @@ static char sEndlessGoalText[24];
 static char sEndlessHudText[24];
 static char sEndlessBestText[32];
 static char sEndlessPerkText[32];
+static char sEndlessClockText[24];
+static char sEndlessModeText[32];
 static s32 sEndlessLastTrack;
 
 /******************************/
@@ -174,6 +190,7 @@ void endless_start(void) {
     gEndlessTrackWorld = 1;
     gEndlessMirrorThisRace = FALSE;
     gEndlessPerkBananas = 0;
+    gEndlessClock = normalise_time(ENDLESS_TA_START_SECONDS * ENDLESS_TICKS_PER_SECOND);
     sEndlessLastTrack = -1;
     endless_build_pool();
     endless_shuffle_pool();
@@ -312,6 +329,106 @@ s32 endless_perk_bananas(void) {
     return gEndlessPerkBananas;
 }
 
+s32 endless_time_attack(void) {
+    return gEndlessTimeAttack;
+}
+
+void endless_toggle_time_attack(void) {
+    gEndlessTimeAttack = !gEndlessTimeAttack;
+    gEndlessClock = normalise_time(ENDLESS_TA_START_SECONDS * ENDLESS_TICKS_PER_SECOND);
+}
+
+s32 endless_clock(void) {
+    return gEndlessClock;
+}
+
+/**
+ * Settle the run clock against the race just finished. The refund is a share
+ * of that race's own duration, so the rule reads the same on every track.
+ */
+static void endless_settle_clock(void) {
+    Settings *settings = get_settings();
+    s32 raceTime = settings->racers[0].course_time;
+    s32 percent;
+
+    switch (endless_best_finish()) {
+        case 0:
+            percent = ENDLESS_TA_PCT_FIRST;
+            break;
+        case 1:
+            percent = ENDLESS_TA_PCT_SECOND;
+            break;
+        case 2:
+            percent = ENDLESS_TA_PCT_THIRD;
+            break;
+        case 3:
+            percent = ENDLESS_TA_PCT_FOURTH;
+            break;
+        default:
+            percent = ENDLESS_TA_PCT_REST;
+            break;
+    }
+    gEndlessClock += (raceTime * percent) / 100;
+    if (gEndlessClock < 0) {
+        gEndlessClock = 0;
+    }
+}
+
+/**
+ * Whether the run survives the round that just finished. Survival mode ends on
+ * a missed placement; Time Attack ignores placement entirely and ends only when
+ * the clock runs dry, so a bad race costs time rather than the whole run.
+ */
+s32 endless_run_continues(void) {
+    if (gEndlessTimeAttack) {
+        return gEndlessClock > 0;
+    }
+    return endless_player_survived();
+}
+
+/**
+ * Settle everything the finished round owes: the run clock, the save record,
+ * and the head start for next time. Called once, as the rankings screen opens,
+ * so that screen and the exit branch agree on the outcome.
+ */
+void endless_round_finished(void) {
+    if (gEndlessTimeAttack) {
+        endless_settle_clock();
+    }
+    if (endless_run_continues()) {
+        endless_record_run(gEndlessRound + 1);
+        endless_award_perk();
+    } else {
+        endless_record_run(gEndlessRound);
+    }
+}
+
+char *endless_clock_text(void) {
+    s32 seconds = gEndlessClock / normalise_time(ENDLESS_TICKS_PER_SECOND);
+    char *end = endless_append_string(sEndlessClockText, "TIME ");
+
+    end = endless_append_number(end, seconds / 60);
+    *end++ = ':';
+    // Seconds are always two digits, or "2:5" would read as two minutes five.
+    *end++ = (char) ('0' + ((seconds % 60) / 10));
+    *end++ = (char) ('0' + ((seconds % 60) % 10));
+    *end = '\0';
+    return sEndlessClockText;
+}
+
+/**
+ * The mode line on the first round's intro, which doubles as the prompt for
+ * switching -- there is no menu for this, so the screen has to say so.
+ */
+char *endless_mode_text(void) {
+    if (gEndlessTimeAttack) {
+        endless_append_string(sEndlessModeText, "TIME ATTACK    Z: SURVIVAL");
+    } else {
+        endless_append_string(sEndlessModeText, "SURVIVAL    Z: TIME ATTACK");
+    }
+    return sEndlessModeText;
+}
+
 /**
  * Names the head start on the round intro so it does not look like a glitch
  * when the player starts a race already holding bananas.
@@ -329,10 +446,14 @@ s32 endless_mirrored(void) {
 }
 
 /**
- * TRUE if a live race position (1 = first) currently clears this round's
- * requirement. Drives the colour of the in-race status line.
+ * Whether the in-race status line should read as safe. In Survival that is
+ * holding the required position (1 = first); in Time Attack placement is
+ * irrelevant, so it is whether the clock still has comfortable room.
  */
 s32 endless_position_is_safe(s32 racePosition) {
+    if (gEndlessTimeAttack) {
+        return gEndlessClock > normalise_time(60 * ENDLESS_TICKS_PER_SECOND);
+    }
     return (racePosition - 1) <= endless_required_position();
 }
 
@@ -489,7 +610,10 @@ char *endless_hud_text(void) {
     char *end = endless_append_string(sEndlessHudText, "ROUND ");
 
     end = endless_append_number(end, gEndlessRound + 1);
-    if (endless_required_position() == 0) {
+    if (gEndlessTimeAttack) {
+        end = endless_append_string(end, "  ");
+        endless_append_string(end, endless_clock_text());
+    } else if (endless_required_position() == 0) {
         endless_append_string(end, "  1ST");
     } else {
         end = endless_append_string(end, "  TOP ");
