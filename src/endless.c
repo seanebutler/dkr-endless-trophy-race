@@ -64,6 +64,14 @@
 // Car, hovercraft and plane -- the three a player can normally pick between.
 #define ENDLESS_VEHICLE_CHOICES 3
 
+// Silver coin bounty. The eight coins a track already carries for its adventure
+// challenge are switched on as an optional objective: collecting the set buys a
+// reward, ignoring them costs nothing. Deliberately not a loss condition, so
+// each mode keeps exactly one way to end a run.
+#define ENDLESS_BOUNTY_COINS 8
+#define ENDLESS_BOUNTY_BANANAS 10      // The human banana cap, so this is the biggest head start available.
+#define ENDLESS_BOUNTY_TA_SECONDS 20   // Time Attack pays in clock instead.
+
 typedef enum EndlessEvent {
     ENDLESS_EVENT_NONE,
     ENDLESS_EVENT_NO_WEAPONS,
@@ -141,6 +149,7 @@ static s32 sEndlessResultScore;
 static s32 sEndlessResultRounds;
 static s32 sEndlessResultPosition;
 static s32 sEndlessNewBest;
+static s32 sEndlessBountyClaimed;
 static u32 sEndlessRngState;
 
 /******************************/
@@ -376,6 +385,7 @@ static void endless_begin_with_seed(s32 seed) {
     sEndlessResultRounds = 0;
     sEndlessResultPosition = 0;
     sEndlessNewBest = FALSE;
+    sEndlessBountyClaimed = FALSE;
     for (i = 0; i < 8; i++) {
         settings->racers[i].trophy_points = 0;
     }
@@ -649,6 +659,34 @@ s32 endless_seed_refresh_due(s32 updateRate) {
     return FALSE;
 }
 
+/**
+ * Whether this round is running the silver coin bounty. Tied to the gauntlet so
+ * that Classic keeps racing exactly the track v0.2 raced, with nothing extra on
+ * it, and restricted to ordinary races because that is where the coins live.
+ */
+s32 endless_bounty_active(void) {
+    if (!gEndlessActive || !gEndlessEventsEnabled) {
+        return FALSE;
+    }
+    return gEndlessTrackId >= 0 && leveltable_type(gEndlessTrackId) == RACETYPE_DEFAULT;
+}
+
+/**
+ * Record how many coins a human finished with. Called as the results are
+ * written, while the racer objects still exist -- by the time the rankings
+ * screen opens they are gone. Any human completing the set claims it, so co-op
+ * can split the work.
+ */
+void endless_note_coins(s32 coins) {
+    if (gEndlessActive && coins >= ENDLESS_BOUNTY_COINS) {
+        sEndlessBountyClaimed = TRUE;
+    }
+}
+
+s32 endless_bounty_claimed(void) {
+    return sEndlessBountyClaimed;
+}
+
 s32 endless_time_attack(void) {
     return gEndlessTimeAttack;
 }
@@ -766,6 +804,14 @@ void endless_round_finished(s32 roundPoints) {
     if (gEndlessTimeAttack) {
         endless_settle_clock();
     }
+    // The bounty is paid before the clock is judged, so a full coin set can be
+    // what keeps a Time Attack run alive rather than a consolation for losing.
+    if (sEndlessBountyClaimed && gEndlessTimeAttack) {
+        gEndlessClock += normalise_time(ENDLESS_BOUNTY_TA_SECONDS * ENDLESS_TICKS_PER_SECOND);
+    }
+    if (gEndlessTimeAttack) {
+        endless_settle_clock();
+    }
     survived = endless_run_continues();
     sEndlessResultRounds = survived ? gEndlessRound + 1 : gEndlessRound;
     sEndlessResultScore = endless_score() + roundPoints;
@@ -775,7 +821,13 @@ void endless_round_finished(s32 roundPoints) {
     }
     if (survived) {
         endless_award_perk();
+        // Survival pays the bounty as the largest head start there is, which
+        // beats anything placement alone can earn.
+        if (sEndlessBountyClaimed && !gEndlessTimeAttack) {
+            gEndlessPerkBananas = ENDLESS_BOUNTY_BANANAS;
+        }
     }
+    sEndlessBountyClaimed = FALSE;
 }
 
 char *endless_clock_text(void) {
@@ -859,8 +911,16 @@ char *endless_seed_digit_text(void) {
  * when the player starts a race already holding bananas.
  */
 char *endless_perk_text(void) {
-    char *end = endless_append_string(sEndlessPerkText, "HEAD START  ");
+    char *end;
 
+    // Naming the bounty payout is the only place the coins explain what they
+    // were worth. Placement alone tops out well below the bounty's award, so
+    // the size of the head start identifies where it came from.
+    if (gEndlessPerkBananas >= ENDLESS_BOUNTY_BANANAS) {
+        end = endless_append_string(sEndlessPerkText, "COIN BOUNTY  ");
+    } else {
+        end = endless_append_string(sEndlessPerkText, "HEAD START  ");
+    }
     end = endless_append_number(end, gEndlessPerkBananas);
     endless_append_string(end, " BANANAS");
     return sEndlessPerkText;

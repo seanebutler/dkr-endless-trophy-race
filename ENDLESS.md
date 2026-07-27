@@ -50,7 +50,18 @@ Both layers use their own stateless hashes rather than the track-order RNG, so
 neither consumes it. **Classic** turns both off and keeps the exact track and
 mirror sequence that the same seed produced in v0.2.
 
-The two share one switch because the save has room for four record categories,
+Gauntlet also switches on the **silver coin bounty**. The eight coins a track
+already carries for its adventure challenge appear on the course, and the
+in-race tally comes with them. Collecting the set is worth a ten-banana head
+start next round in Survival, or twenty seconds of clock in Time Attack —
+enough that a full set can be what keeps a Time Attack run alive.
+
+Coins are strictly optional and never a loss condition: ignoring them costs
+nothing, so each mode keeps exactly one way to end a run. What they add is a
+second racing line worth weighing against position, since the detour to a coin
+is usually the slow way round.
+
+These share one switch because the save has room for four record categories,
 not eight — see below.
 
 Your round and what you need are on the HUD the whole race, turning red the

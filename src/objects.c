@@ -974,6 +974,14 @@ void track_spawn_objects(s32 mapID, s32 index) {
     if (level_type()) {
         gIsSilverCoinRace = FALSE;
     }
+    // ENDLESS: the bounty runs in Tracks mode, where the checks above always
+    // switch the coins off. The adventure conditions they test -- which world's
+    // boss is beaten, whether this course was already coin-cleared -- describe
+    // progress this mode does not have, so the decision is made in endless.c
+    // and simply asserted here.
+    if (endless_bounty_active()) {
+        gIsSilverCoinRace = TRUE;
+    }
 
     D_8011AD3E = 0;
     mem = mempool_alloc_safe(OBJECT_MAP_SIZE, COLOUR_TAG_BLUE);
@@ -6506,6 +6514,12 @@ void race_check_finish(s32 updateRate) {
                     curRacer = gRacersByPosition[i]->racer;
                     racerPos = curRacer->racerIndex;
                     settings->racers[racerPos].starting_position = i;
+                    // ENDLESS: claim the coin bounty while the racer objects
+                    // still exist; the rankings screen that pays it out runs
+                    // after they have been freed.
+                    if (curRacer->playerIndex != PLAYER_COMPUTER) {
+                        endless_note_coins(curRacer->silverCoinCount);
+                    }
                     i++;
                 } while (i < gNumRacers);
             }

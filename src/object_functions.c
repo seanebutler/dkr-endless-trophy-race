@@ -7,6 +7,7 @@
 #include "camera.h"
 #include "collision.h"
 #include "common.h"
+#include "endless.h"
 #include "fade_transition.h"
 #include "font.h"
 #include "game.h"
@@ -4534,7 +4535,11 @@ void obj_init_silvercoin(Object *obj, UNUSED LevelObjectEntry_SilverCoin *entry)
     obj->interactObj->hitboxRadius = 30;
     obj->properties.silverCoin.action = SILVER_COIN_INACTIVE;
     obj->properties.silverCoin.timer = 0;
-    if (!is_in_tracks_mode()) {
+    // ENDLESS: the bounty runs in Tracks mode, which this guard otherwise
+    // excludes outright. Only this variant is woken -- the adventure-two set
+    // sits in the same maps, and activating both would put two coins on every
+    // pad.
+    if (!is_in_tracks_mode() || endless_bounty_active()) {
         if (check_if_silver_coin_race() && !is_in_adventure_two()) {
             obj->properties.silverCoin.action = SILVER_COIN_ACTIVE;
         } else {
