@@ -12000,6 +12000,7 @@ void trophyround_render(UNUSED s32 updateRate) {
     s32 yPos;
     char *worldName;
     char *levelName;
+    char *title;
     s8 *levelIds;
 
     levelIds = (s8 *) get_misc_asset(ASSET_MISC_TRACKS_MENU_IDS);
@@ -12017,17 +12018,19 @@ void trophyround_render(UNUSED s32 updateRate) {
     } else {
         levelName = level_name(levelIds[((gTrophyRaceWorldId - 1) * 6) + gTrophyRaceRound]);
     }
+    // ENDLESS: the screen belongs to this mode, so name it for what it is.
+    // Drawn as a literal rather than a text asset so the string does not have
+    // to exist in every language table.
+    title = endless_is_active() ? "ENDLESS RACE" : gMenuText[ASSET_MENU_TEXT_TROPHYRACE];
     set_text_background_colour(0, 0, 0, 0);
     set_text_font(ASSET_FONTS_BIGFONT);
     // Text Shadows first
     set_text_colour(0, 0, 0, 255, 128);
     draw_text(&sMenuCurrDisplayList, SCREEN_WIDTH_HALF + 1, 35, (char *) worldName, ALIGN_MIDDLE_CENTER);
-    draw_text(&sMenuCurrDisplayList, SCREEN_WIDTH_HALF + 1, 67, gMenuText[ASSET_MENU_TEXT_TROPHYRACE],
-              ALIGN_MIDDLE_CENTER); // TROPHY RACE
+    draw_text(&sMenuCurrDisplayList, SCREEN_WIDTH_HALF + 1, 67, title, ALIGN_MIDDLE_CENTER);
     set_text_colour(255, 255, 255, 0, 255);
     draw_text(&sMenuCurrDisplayList, SCREEN_WIDTH_HALF, 32, (char *) worldName, ALIGN_MIDDLE_CENTER);
-    draw_text(&sMenuCurrDisplayList, SCREEN_WIDTH_HALF, 64, gMenuText[ASSET_MENU_TEXT_TROPHYRACE],
-              ALIGN_MIDDLE_CENTER); // TROPHY RACE
+    draw_text(&sMenuCurrDisplayList, SCREEN_WIDTH_HALF, 64, title, ALIGN_MIDDLE_CENTER);
     if (endless_is_active()) {
         // FUNFONT has digit glyphs; BIGFONT is letters-only.
         set_text_font(ASSET_FONTS_FUNFONT);
@@ -12222,7 +12225,18 @@ void menu_trophy_race_rankings_init(void) {
         } while (trackMenuIds[((gTrophyRaceWorldId - 1) * 6) + gTrophyRaceRound] == -1);
     }
 
-    if (gTrophyRaceRound < 4) {
+    // ENDLESS: one honest option. The vanilla branch below offers CONTINUE and
+    // QUIT TROPHY RACE (and counts three while only setting two, leaving a
+    // stale pointer to be drawn), but in this mode the choice does not exist:
+    // surviving always continues and failing always ends the run.
+    if (endless_is_active()) {
+        if (endless_player_survived()) {
+            gResultOptionText[0] = gMenuText[ASSET_MENU_TEXT_CONTINUE];
+        } else {
+            gResultOptionText[0] = gMenuText[ASSET_MENU_TEXT_QUIT];
+        }
+        gResultOptionCount = 1;
+    } else if (gTrophyRaceRound < 4) {
         gResultOptionText[0] = gMenuText[ASSET_MENU_TEXT_CONTINUE];
         gResultOptionText[1] = gMenuText[ASSET_MENU_TEXT_QUITTROPHYRACE];
         gResultOptionCount = 3;
