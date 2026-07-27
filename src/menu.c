@@ -12614,7 +12614,14 @@ s32 menu_trophy_race_rankings_loop(s32 updateRate) {
     if (gMenuDelay > -20 && gMenuDelay < 20) {
         rankings_render_order(updateRate);
     }
-    update_controller_sticks();
+    // ENDLESS: menu_loop already polled the sticks this frame. Polling again
+    // here reports no direction at all, because the poll only fires on the
+    // edge where the stick crosses the deadzone from rest -- the first call
+    // consumes that edge and records the stick as already deflected.
+    //
+    // Vanilla got away with it: this screen drew an option cursor it never
+    // acted on. The game over menu does act on it, so the second poll left
+    // RETRY SEED / NEW SEED / QUIT impossible to move between.
     switch (gMenuStage) { // gMenuStage = current Trophy Race Rankings state?
         case POSTRACE_ENTER:
             if (postrace_render(updateRate)) {
