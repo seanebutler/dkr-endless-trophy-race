@@ -72,7 +72,9 @@ These share one switch because the save has room for four record categories,
 not eight — see below.
 
 Your round and what you need are on the HUD the whole race, turning red the
-moment you drop out of it.
+moment you drop out of it, with a digital speed readout above them. Both sit
+centred along the bottom, in the gap between the weapon icon and the minimap.
+Speed is solo only — the split-screen viewports have no room to spare.
 
 ### Two ways to lose
 

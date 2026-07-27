@@ -3320,7 +3320,7 @@ s8 hud_setting(void) {
  */
 static void hud_endless_status_line(char *status, s32 xPos, s32 yPos, s32 safe) {
     set_text_colour(0, 0, 0, 255, 255);
-    draw_text(&gHudDL, xPos + 1, yPos + 1, status, ALIGN_MIDDLE_LEFT);
+    draw_text(&gHudDL, xPos + 1, yPos + 1, status, ALIGN_MIDDLE_CENTER);
     // FUNFONT's glyphs carry their own colours, so the danger state overrides
     // them hard (the fourth argument is how much the flat colour replaces the
     // texture) while the safe state leaves the font looking normal. A subtle
@@ -3330,7 +3330,7 @@ static void hud_endless_status_line(char *status, s32 xPos, s32 yPos, s32 safe) 
     } else {
         set_text_colour(255, 48, 48, 220, 255);
     }
-    draw_text(&gHudDL, xPos, yPos, status, ALIGN_MIDDLE_LEFT);
+    draw_text(&gHudDL, xPos, yPos, status, ALIGN_MIDDLE_CENTER);
 }
 
 /**
@@ -3341,6 +3341,7 @@ static void hud_endless_status_line(char *status, s32 xPos, s32 yPos, s32 safe) 
 void hud_endless_status(Object **racers, s32 racerCount) {
     Object_Racer *racer;
     char *status;
+    f32 speed;
     s32 bestPosition;
     s32 humanCount;
     s32 safe;
@@ -3379,7 +3380,7 @@ void hud_endless_status(Object **racers, s32 racerCount) {
         if (racer->playerIndex == PLAYER_COMPUTER) {
             continue;
         }
-        xPos = gHudOffsetX + 8;
+        xPos = gHudOffsetX + SCREEN_WIDTH_HALF;
         if (humanCount == 2) {
             if (racer->playerIndex == PLAYER_ONE) {
                 yPos = topY;
@@ -3392,11 +3393,25 @@ void hud_endless_status(Object **racers, s32 racerCount) {
             } else {
                 yPos = (osTvType == OS_TV_TYPE_PAL) ? 223 : 205;
             }
+            // Quarter screens: centre of the left or right half.
+            xPos = gHudOffsetX + (SCREEN_WIDTH_HALF / 2);
             if (racer->playerIndex == PLAYER_TWO || racer->playerIndex == PLAYER_FOUR) {
                 xPos += SCREEN_WIDTH_HALF;
             }
         }
         hud_endless_status_line(status, xPos, yPos, safe);
+        // A digital readout of the same figure the vanilla speedometer needle
+        // sweeps, so the gauge and the number never disagree. Solo only: the
+        // split-screen layouts are already tight, and this is a luxury rather
+        // than something a run depends on.
+        if (humanCount == 1) {
+            speed = (racers[i]->x_velocity * racers[i]->x_velocity) +
+                    (racers[i]->z_velocity * racers[i]->z_velocity);
+            if (racer->vehicleID == VEHICLE_PLANE) {
+                speed += racers[i]->y_velocity * racers[i]->y_velocity;
+            }
+            hud_endless_status_line(endless_speed_text((s32) (sqrtf(speed) * 4.0f)), xPos, yPos - 16, TRUE);
+        }
     }
     set_kerning(FALSE);
 }
