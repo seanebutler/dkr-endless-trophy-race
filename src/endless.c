@@ -50,6 +50,11 @@
 // Seeds are four digits so they can be read out loud and typed back in.
 #define ENDLESS_SEED_MAX 9999
 #define ENDLESS_SEED_DIGITS 4
+// Frames of stillness before the intro rebuilds around a changed seed. Any
+// rebuild reloads the backdrop, and unloading a level stops the menu music, so
+// this is what keeps a burst of digit turns to one interruption instead of one
+// per keystroke.
+#define ENDLESS_SEED_REFRESH_DELAY 30
 
 // Where the run record lives in the EEPROM settings word. Bits 0-25 are the
 // vanilla flags (Adventure Two, Drumstick, language, T.T. course times,
@@ -98,6 +103,7 @@ static char sEndlessSeedPrefix[40];
 static char sEndlessSeedDigitText[4];
 static s32 sEndlessLastTrack;
 static s32 sEndlessSeedDigit;
+static s32 sEndlessSeedRefreshTimer;
 static u32 sEndlessRngState;
 
 /******************************/
@@ -432,6 +438,33 @@ void endless_seed_change_digit(s32 delta) {
         wanted -= 10;
     }
     endless_set_seed(gEndlessSeed + ((wanted - digit) * place));
+}
+
+/**
+ * Note that the seed changed and the intro needs rebuilding around it, once the
+ * player stops turning digits.
+ */
+void endless_seed_mark_dirty(void) {
+    sEndlessSeedRefreshTimer = ENDLESS_SEED_REFRESH_DELAY;
+}
+
+s32 endless_seed_refresh_pending(void) {
+    return sEndlessSeedRefreshTimer > 0;
+}
+
+/**
+ * TRUE on the single frame the wait expires.
+ */
+s32 endless_seed_refresh_due(s32 updateRate) {
+    if (sEndlessSeedRefreshTimer <= 0) {
+        return FALSE;
+    }
+    sEndlessSeedRefreshTimer -= updateRate;
+    if (sEndlessSeedRefreshTimer <= 0) {
+        sEndlessSeedRefreshTimer = 0;
+        return TRUE;
+    }
+    return FALSE;
 }
 
 s32 endless_time_attack(void) {

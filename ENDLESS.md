@@ -66,10 +66,12 @@ round's intro, **left/right** picks a digit (the one being edited is drawn in
 yellow) and **up/down** turns it, so a seed someone reads out can be dialled in
 directly.
 
-The track updates as soon as a digit changes, but the scenery behind the text
-does not: loading it stops the menu music, so reloading it per keystroke would
-mean cutting the music every time a digit turns. Starting the race loads the
-right track regardless — the backdrop is only decoration.
+The screen rebuilds around the new seed about half a second after you stop
+turning digits — the track, the scenery behind it and the music all refresh
+together. That pause is deliberate: swapping the backdrop means unloading the
+previous level, which stops the menu music (that is why the code that opens
+this screen replays it straight after loading a track). Waiting for you to
+settle keeps a burst of edits to one interruption instead of one per keystroke.
 
 Adventure-mode trophy races are untouched and still play the vanilla four-round
 format. T.T. is on the roster from the start.

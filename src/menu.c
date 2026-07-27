@@ -12144,21 +12144,31 @@ s32 menu_trophy_race_round_loop(s32 updateRate) {
             }
             if (gMenuStickY[PLAYER_MENU] != 0) {
                 endless_seed_change_digit(gMenuStickY[PLAYER_MENU] > 0 ? 1 : -1);
-                // The track the new seed draws takes effect at once, so the
-                // screen never names a race the seed is not going to run.
-                //
-                // The scenery behind the text is deliberately left alone. It is
-                // loaded with load_level_for_menu, which stops the menu music
-                // -- that is why the init that opens this screen restarts the
-                // music straight after loading it. Reloading it per edit would
-                // mean cutting the music every time a digit turns, and the
-                // backdrop is only decoration: pressing A loads the real track
-                // either way.
-                trophyround_reseed_track();
+                endless_seed_mark_dirty();
                 sound_play(SOUND_MENU_PICK2, NULL);
+            }
+            // Rebuild the screen around the new seed once the player settles,
+            // which re-draws the track, swaps the backdrop to it and restarts
+            // the music. It has to be the whole screen: the backdrop is loaded
+            // by unloading the previous level, and that stops the menu music,
+            // which is why the init below reloads the font and replays the
+            // music straight after loading a track. Doing it on a delay keeps a
+            // burst of digit turns to one interruption rather than one each,
+            // and doing it all together keeps the name, the scenery and the
+            // race that actually starts in agreement.
+            if (endless_seed_refresh_due(updateRate)) {
+                trophyround_free();
+                menu_init(MENU_TROPHY_RACE_ROUND);
+                return MENU_RESULT_CONTINUE;
             }
         }
         if ((gMenuButtons[PLAYER_MENU] & (A_BUTTON | START_BUTTON)) != 0) {
+            // Starting before a seed edit settled: draw the new seed's track
+            // now. The seed has to win, or the run would not match the number
+            // the player set and could not be handed to anyone else.
+            if (endless_is_active() && endless_seed_refresh_pending()) {
+                trophyround_reseed_track();
+            }
             transition_begin(&sMenuTransitionFadeIn);
             gMenuDelay = 1;
             music_fade(-128);
