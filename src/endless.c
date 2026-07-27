@@ -15,8 +15,9 @@
  *
  * Holds the mode state and all tuning; menu.c and game.c call into here from
  * small hooks in the existing Trophy Race flow. gTrophyRaceRound is pinned to
- * 0 for the whole run so the vanilla rankings screen always takes its
- * "continue to next round" path; the real round counter lives here.
+ * 0 for the whole run so a cleared race can reuse the vanilla "continue to
+ * next round" path; failures branch into the Endless receipt and retry flow.
+ * The real, unbounded round counter lives here.
  */
 
 // Rounds are 0-based internally; shown to the player as round + 1.
@@ -56,14 +57,41 @@
 // per keystroke.
 #define ENDLESS_SEED_REFRESH_DELAY 30
 
-// Where the run record lives in the EEPROM settings word. Bits 0-25 are the
-// vanilla flags (Adventure Two, Drumstick, language, T.T. course times,
-// subtitles) and write_eeprom_settings reserves bits 56-63 for its checksum,
-// which leaves 26-55 unused. Nothing here can reach these ceilings in practice.
-#define ENDLESS_SAVE_ROUNDS_SHIFT 32
-#define ENDLESS_SAVE_ROUNDS_MASK ((u64) 0x3FF) // 10 bits, up to 1023 rounds
-#define ENDLESS_SAVE_SCORE_SHIFT 42
-#define ENDLESS_SAVE_SCORE_MASK ((u64) 0x3FFF) // 14 bits, up to 16383 points
+// Seeded event rounds use existing, well-tested magic-code rules. They are
+// deliberately selected from a stateless seed/round hash instead of the track
+// RNG, so enabling events cannot change a seed's track or mirror sequence.
+#define ENDLESS_EVENT_INTERVAL 4
+
+typedef enum EndlessEvent {
+    ENDLESS_EVENT_NONE,
+    ENDLESS_EVENT_NO_WEAPONS,
+    ENDLESS_EVENT_NO_ZIPPERS,
+    ENDLESS_EVENT_BOOST_BALLOONS,
+    ENDLESS_EVENT_SHIELD_BALLOONS,
+    ENDLESS_EVENT_MAX_POWER,
+    ENDLESS_EVENT_COUNT
+} EndlessEvent;
+
+// Where categorized records live in the EEPROM settings word. Bits 0-25 are
+// vanilla flags and bits 56-63 are the settings checksum, leaving 30 bits. Four
+// full round+score records cannot fit there, so each rules category keeps an
+// honest 7-bit best depth and the full score remains on the run receipt.
+//
+// Categories are Survival/Events Off, Survival/Events On, Time Attack/Events
+// Off, and Time Attack/Events On. The first two free bits mark this layout;
+// v0.2 never wrote them, so no legacy score can be mistaken for the marker.
+// The old v0.2 record is migrated into the only category that existed
+// unambiguously: Events Off; its mode was not stored, so it is assigned to
+// Survival.
+#define ENDLESS_SAVE_LAYOUT_MARKER_SHIFT 26
+#define ENDLESS_SAVE_LAYOUT_MARKER_MASK ((u64) 0x3)
+#define ENDLESS_SAVE_LAYOUT_MARKER_VALUE ((u64) 0x3)
+#define ENDLESS_SAVE_RECORD_BASE_SHIFT 28
+#define ENDLESS_SAVE_RECORD_BITS 7
+#define ENDLESS_SAVE_RECORD_MASK ((u64) 0x7F) // 127 rounds per category.
+#define ENDLESS_SAVE_LAYOUT_MASK (((u64) 0x3FFFFFFF) << ENDLESS_SAVE_LAYOUT_MARKER_SHIFT)
+#define ENDLESS_LEGACY_ROUNDS_SHIFT 32
+#define ENDLESS_LEGACY_ROUNDS_MASK ((u64) 0x3FF)
 
 // Layout of ASSET_MISC_TRACKS_MENU_IDS: one row of 6 entries per world, the
 // first 4 being races and the last 2 the trophy race and battle arena.
@@ -80,6 +108,7 @@ s32 gEndlessTrackWorld = 1;
 s32 gEndlessMirrorThisRace = FALSE;
 s32 gEndlessPerkBananas = 0;
 s32 gEndlessTimeAttack = FALSE; // Kept between runs: it is a preference.
+s32 gEndlessEventsEnabled = TRUE; // Also a preference; OFF is classic v0.2 play.
 s32 gEndlessClock = 0;
 s32 gEndlessSeed = 0;
 
@@ -94,19 +123,27 @@ static s32 sEndlessPoolCursor;
 static char sEndlessRoundText[16];
 static char sEndlessScoreText[24];
 static char sEndlessGoalText[24];
-static char sEndlessHudText[24];
+static char sEndlessHudText[48];
 static char sEndlessBestText[32];
 static char sEndlessPerkText[32];
 static char sEndlessClockText[24];
 static char sEndlessModeText[40];
+static char sEndlessResultText[40];
+static char sEndlessResultDetailText[40];
 static char sEndlessSeedPrefix[40];
 static char sEndlessSeedDigitText[4];
 static s32 sEndlessLastTrack;
 static s32 sEndlessSeedDigit;
 static s32 sEndlessSeedRefreshTimer;
+static s32 sEndlessResultScore;
+static s32 sEndlessResultRounds;
+static s32 sEndlessResultPosition;
+static s32 sEndlessNewBest;
 static u32 sEndlessRngState;
 
 /******************************/
+
+static void endless_ensure_record_layout(void);
 
 /**
  * The run's own random stream. The game's shared rand_range is advanced by
@@ -134,6 +171,29 @@ static s32 endless_rng_range(s32 max) {
         return 0;
     }
     return (s32) (endless_rng_next() % (u32) (max + 1));
+}
+
+/**
+ * Stateless random value reserved for event selection. Keeping it entirely
+ * separate from sEndlessRngState is what lets EVENTS OFF reproduce v0.2 track
+ * and mirror sequences exactly.
+ */
+static u32 endless_event_hash(void) {
+    u32 value = (u32) gEndlessSeed ^ (((u32) gEndlessRound + 1U) * 0x9E3779B9U) ^ 0xE71E5EEDU;
+
+    value ^= value >> 16;
+    value *= 0x7FEB352DU;
+    value ^= value >> 15;
+    value *= 0x846CA68BU;
+    value ^= value >> 16;
+    return value;
+}
+
+static EndlessEvent endless_event(void) {
+    if (!gEndlessEventsEnabled || ((gEndlessRound + 1) % ENDLESS_EVENT_INTERVAL) != 0) {
+        return ENDLESS_EVENT_NONE;
+    }
+    return (EndlessEvent) (ENDLESS_EVENT_NO_WEAPONS + (endless_event_hash() % (ENDLESS_EVENT_COUNT - 1)));
 }
 
 /**
@@ -223,10 +283,16 @@ static void endless_shuffle_pool(void) {
     sEndlessPoolCursor = 0;
 }
 
-void endless_start(void) {
-    Settings *settings = get_settings();
+static void endless_begin_with_seed(s32 seed) {
+    Settings *settings;
     s32 i;
 
+    endless_ensure_record_layout();
+    // Results overwrite starting_position and per-race timing fields. Starting
+    // a new attempt must restore the same clean grid as entering Tracks mode,
+    // while init_racer_headers preserves the selected character slots.
+    init_racer_headers();
+    settings = get_settings();
     gEndlessActive = TRUE;
     gEndlessRound = 0;
     gEndlessTrackId = -1;
@@ -234,12 +300,42 @@ void endless_start(void) {
     gEndlessMirrorThisRace = FALSE;
     gEndlessPerkBananas = 0;
     gEndlessClock = normalise_time(ENDLESS_TA_START_SECONDS * ENDLESS_TICKS_PER_SECOND);
+    sEndlessSeedDigit = 0;
+    sEndlessSeedRefreshTimer = 0;
+    sEndlessResultScore = 0;
+    sEndlessResultRounds = 0;
+    sEndlessResultPosition = 0;
+    sEndlessNewBest = FALSE;
     for (i = 0; i < 8; i++) {
         settings->racers[i].trophy_points = 0;
     }
-    // A fresh run gets a random seed; this also builds and shuffles the bag.
-    // The player can still change it on the first round's intro.
-    endless_set_seed(rand_range(0, ENDLESS_SEED_MAX));
+    endless_set_seed(seed);
+}
+
+void endless_start(void) {
+    // A fresh run gets a random seed; the first intro still lets the player
+    // replace it before starting.
+    endless_begin_with_seed(rand_range(0, ENDLESS_SEED_MAX));
+}
+
+void endless_retry_seed(void) {
+    s32 seed = gEndlessSeed;
+
+    endless_begin_with_seed(seed);
+}
+
+void endless_new_seed(void) {
+    s32 oldSeed = gEndlessSeed;
+    s32 seed = rand_range(0, ENDLESS_SEED_MAX);
+
+    // NEW SEED should never silently hand back the run the player just left.
+    if (seed == oldSeed) {
+        seed++;
+        if (seed > ENDLESS_SEED_MAX) {
+            seed = 0;
+        }
+    }
+    endless_begin_with_seed(seed);
 }
 
 void endless_stop(void) {
@@ -320,20 +416,32 @@ s32 endless_required_position(void) {
 }
 
 /**
- * Finishing position of the best-placed human in the race just run, 0 = first.
+ * Settings index of the best-placed human in the race just run.
  * starting_position holds the finish position of the last race.
  */
-static s32 endless_best_finish(void) {
+static s32 endless_best_human_index(void) {
     Settings *settings = get_settings();
+    s32 bestIndex = 0;
     s32 best = 99;
     s32 i;
 
     for (i = 0; i < get_number_of_active_players(); i++) {
         if (settings->racers[i].starting_position < best) {
             best = settings->racers[i].starting_position;
+            bestIndex = i;
         }
     }
-    return best;
+    return bestIndex;
+}
+
+/**
+ * Finishing position of the best-placed human, 0 = first. In co-op this is the
+ * shared team result: either player can keep the run alive.
+ */
+static s32 endless_best_finish(void) {
+    Settings *settings = get_settings();
+
+    return settings->racers[endless_best_human_index()].starting_position;
 }
 
 /**
@@ -448,6 +556,10 @@ void endless_seed_mark_dirty(void) {
     sEndlessSeedRefreshTimer = ENDLESS_SEED_REFRESH_DELAY;
 }
 
+void endless_seed_clear_dirty(void) {
+    sEndlessSeedRefreshTimer = 0;
+}
+
 s32 endless_seed_refresh_pending(void) {
     return sEndlessSeedRefreshTimer > 0;
 }
@@ -476,6 +588,52 @@ void endless_toggle_time_attack(void) {
     gEndlessClock = normalise_time(ENDLESS_TA_START_SECONDS * ENDLESS_TICKS_PER_SECOND);
 }
 
+s32 endless_events_enabled(void) {
+    return gEndlessEventsEnabled;
+}
+
+void endless_toggle_events(void) {
+    gEndlessEventsEnabled = !gEndlessEventsEnabled;
+}
+
+s32 endless_event_active(void) {
+    return endless_event() != ENDLESS_EVENT_NONE;
+}
+
+s32 endless_event_cheats(void) {
+    switch (endless_event()) {
+        case ENDLESS_EVENT_NO_WEAPONS:
+            return CHEAT_DISABLE_WEAPONS;
+        case ENDLESS_EVENT_NO_ZIPPERS:
+            return CHEAT_TURN_OFF_ZIPPERS;
+        case ENDLESS_EVENT_BOOST_BALLOONS:
+            return CHEAT_ALL_BALLOONS_ARE_BLUE;
+        case ENDLESS_EVENT_SHIELD_BALLOONS:
+            return CHEAT_ALL_BALLOONS_ARE_YELLOW;
+        case ENDLESS_EVENT_MAX_POWER:
+            return CHEAT_MAXIMUM_POWER_UP;
+        default:
+            return 0;
+    }
+}
+
+char *endless_event_text(void) {
+    switch (endless_event()) {
+        case ENDLESS_EVENT_NO_WEAPONS:
+            return "EVENT  NO WEAPONS";
+        case ENDLESS_EVENT_NO_ZIPPERS:
+            return "EVENT  NO ZIPPERS";
+        case ENDLESS_EVENT_BOOST_BALLOONS:
+            return "EVENT  BOOST BALLOONS";
+        case ENDLESS_EVENT_SHIELD_BALLOONS:
+            return "EVENT  SHIELD BALLOONS";
+        case ENDLESS_EVENT_MAX_POWER:
+            return "EVENT  MAX POWER";
+        default:
+            return "";
+    }
+}
+
 s32 endless_clock(void) {
     return gEndlessClock;
 }
@@ -486,10 +644,13 @@ s32 endless_clock(void) {
  */
 static void endless_settle_clock(void) {
     Settings *settings = get_settings();
-    s32 raceTime = settings->racers[0].course_time;
+    s32 bestHuman = endless_best_human_index();
+    s32 raceTime = settings->racers[bestHuman].course_time;
     s32 percent;
 
-    switch (endless_best_finish()) {
+    // The placement and duration must come from the same human. Otherwise a
+    // P2 win could be settled using P1's slower finishing time.
+    switch (settings->racers[bestHuman].starting_position) {
         case 0:
             percent = ENDLESS_TA_PCT_FIRST;
             break;
@@ -529,15 +690,21 @@ s32 endless_run_continues(void) {
  * and the head start for next time. Called once, as the rankings screen opens,
  * so that screen and the exit branch agree on the outcome.
  */
-void endless_round_finished(void) {
+void endless_round_finished(s32 roundPoints) {
+    s32 survived;
+
     if (gEndlessTimeAttack) {
         endless_settle_clock();
     }
-    if (endless_run_continues()) {
-        endless_record_run(gEndlessRound + 1);
+    survived = endless_run_continues();
+    sEndlessResultRounds = survived ? gEndlessRound + 1 : gEndlessRound;
+    sEndlessResultScore = endless_score() + roundPoints;
+    sEndlessResultPosition = endless_best_finish() + 1;
+    if (endless_record_run(sEndlessResultRounds)) {
+        sEndlessNewBest = TRUE;
+    }
+    if (survived) {
         endless_award_perk();
-    } else {
-        endless_record_run(gEndlessRound);
     }
 }
 
@@ -555,9 +722,9 @@ char *endless_clock_text(void) {
 }
 
 /**
- * Mode and seed share a line on the first round's intro. They are the two
- * things chosen there, and the intro has to fit them between the title and the
- * track name without crowding either.
+ * Mode, event rules and seed share a line on the first round's intro. Keeping
+ * all three together makes the complete run category visible without adding a
+ * row to an already full screen.
  */
 char *endless_mode_text(void) {
     char *end;
@@ -565,10 +732,11 @@ char *endless_mode_text(void) {
     s32 i;
 
     if (gEndlessTimeAttack) {
-        end = endless_append_string(sEndlessModeText, "TIME ATTACK   SEED ");
+        end = endless_append_string(sEndlessModeText, "TIME ATTACK  EVENTS ");
     } else {
-        end = endless_append_string(sEndlessModeText, "SURVIVAL   SEED ");
+        end = endless_append_string(sEndlessModeText, "SURVIVAL  EVENTS ");
     }
+    end = endless_append_string(end, gEndlessEventsEnabled ? "ON  SEED " : "OFF  SEED ");
     // Leading zeroes are kept so the digits never shift under the cursor.
     for (i = 0; i < ENDLESS_SEED_DIGITS; i++) {
         digit = (gEndlessSeed / endless_digit_place(i)) % 10;
@@ -719,42 +887,107 @@ char *endless_score_text(void) {
     return sEndlessScoreText;
 }
 
-s32 endless_best_rounds(void) {
-    return (s32) ((get_eeprom_settings() >> ENDLESS_SAVE_ROUNDS_SHIFT) & ENDLESS_SAVE_ROUNDS_MASK);
+static s32 endless_record_category(void) {
+    s32 category = gEndlessTimeAttack ? 2 : 0;
+
+    if (gEndlessEventsEnabled) {
+        category++;
+    }
+    return category;
 }
 
-s32 endless_best_score(void) {
-    return (s32) ((get_eeprom_settings() >> ENDLESS_SAVE_SCORE_SHIFT) & ENDLESS_SAVE_SCORE_MASK);
+static s32 endless_record_shift(void) {
+    return ENDLESS_SAVE_RECORD_BASE_SHIFT + (endless_record_category() * ENDLESS_SAVE_RECORD_BITS);
 }
 
 /**
- * Store this run if it beat the saved one. Rounds are the headline record, so
- * a deeper run always wins; the score only breaks ties between equally deep
- * runs, which stops a high-scoring short run from masking a longer one.
+ * EEPROM has no room to split all four rules categories again by player count.
+ * Keep the persistent board honest and comparable by ranking solo attempts;
+ * co-op still gets the complete end-of-run receipt.
+ */
+static s32 endless_records_enabled(void) {
+    return get_number_of_active_players() == 1;
+}
+
+/**
+ * Convert the v0.2 shared round+score record into the categorized v0.3 layout.
+ * Events did not exist in v0.2, so OFF is certain; the old mode was never
+ * stored, so Survival is the least surprising home for the legacy depth.
+ */
+static void endless_ensure_record_layout(void) {
+    u64 value = get_eeprom_settings();
+    s32 marker = (s32) ((value >> ENDLESS_SAVE_LAYOUT_MARKER_SHIFT) & ENDLESS_SAVE_LAYOUT_MARKER_MASK);
+    s32 legacyRounds;
+
+    if (marker == (s32) ENDLESS_SAVE_LAYOUT_MARKER_VALUE) {
+        return;
+    }
+    legacyRounds = (s32) ((value >> ENDLESS_LEGACY_ROUNDS_SHIFT) & ENDLESS_LEGACY_ROUNDS_MASK);
+    if (legacyRounds > (s32) ENDLESS_SAVE_RECORD_MASK) {
+        legacyRounds = (s32) ENDLESS_SAVE_RECORD_MASK;
+    }
+    value &= ~ENDLESS_SAVE_LAYOUT_MASK;
+    value |= ENDLESS_SAVE_LAYOUT_MARKER_VALUE << ENDLESS_SAVE_LAYOUT_MARKER_SHIFT;
+    value |= ((u64) legacyRounds) << ENDLESS_SAVE_RECORD_BASE_SHIFT;
+    *get_eeprom_settings_pointer() = value;
+    mark_write_eeprom_settings();
+}
+
+s32 endless_best_rounds(void) {
+    endless_ensure_record_layout();
+    return (s32) ((get_eeprom_settings() >> endless_record_shift()) & ENDLESS_SAVE_RECORD_MASK);
+}
+
+/**
+ * Store this run if it reached deeper than this rules category's saved run.
+ * The EEPROM has room for four categorized depths but not four full scores;
+ * the full result score remains visible on the game-over receipt.
  *
  * Called after every cleared round rather than only at the end, so a run still
  * counts if the console is reset or the player quits out mid-run.
  */
-void endless_record_run(s32 roundsCleared) {
-    s32 score = endless_score();
-    s32 bestRounds = endless_best_rounds();
-    s32 bestScore = endless_best_score();
+s32 endless_record_run(s32 roundsCleared) {
+    u64 value;
+    u64 fieldMask;
+    s32 shift;
+    s32 bestRounds;
 
-    if (roundsCleared < bestRounds || (roundsCleared == bestRounds && score <= bestScore)) {
-        return;
+    if (!endless_records_enabled()) {
+        return FALSE;
     }
-    if (roundsCleared > (s32) ENDLESS_SAVE_ROUNDS_MASK) {
-        roundsCleared = (s32) ENDLESS_SAVE_ROUNDS_MASK;
+    bestRounds = endless_best_rounds();
+
+    if (roundsCleared > (s32) ENDLESS_SAVE_RECORD_MASK) {
+        roundsCleared = (s32) ENDLESS_SAVE_RECORD_MASK;
     }
-    if (score > (s32) ENDLESS_SAVE_SCORE_MASK) {
-        score = (s32) ENDLESS_SAVE_SCORE_MASK;
+    if (roundsCleared <= bestRounds) {
+        return FALSE;
     }
 
-    // The setter only ORs bits, so each field is cleared before being written.
-    unset_eeprom_settings_value(ENDLESS_SAVE_ROUNDS_MASK << ENDLESS_SAVE_ROUNDS_SHIFT);
-    unset_eeprom_settings_value(ENDLESS_SAVE_SCORE_MASK << ENDLESS_SAVE_SCORE_SHIFT);
-    set_eeprom_settings_value(((u64) roundsCleared) << ENDLESS_SAVE_ROUNDS_SHIFT);
-    set_eeprom_settings_value(((u64) score) << ENDLESS_SAVE_SCORE_SHIFT);
+    shift = endless_record_shift();
+    fieldMask = ENDLESS_SAVE_RECORD_MASK << shift;
+    value = get_eeprom_settings();
+    value &= ~fieldMask;
+    value |= ((u64) roundsCleared) << shift;
+    *get_eeprom_settings_pointer() = value;
+    mark_write_eeprom_settings();
+    return TRUE;
+}
+
+/**
+ * Treat Endless depths as part of Game Pak TIMES so the existing erase option
+ * really returns every record category to a clean state.
+ */
+void endless_clear_records(void) {
+    u64 value = get_eeprom_settings();
+
+    value &= ~ENDLESS_SAVE_LAYOUT_MASK;
+    *get_eeprom_settings_pointer() = value;
+    mark_write_eeprom_settings();
+}
+
+s32 endless_new_best(void) {
+    return sEndlessNewBest;
 }
 
 /**
@@ -763,16 +996,47 @@ void endless_record_run(s32 roundsCleared) {
 char *endless_best_text(void) {
     char *end;
 
+    if (!endless_records_enabled()) {
+        endless_append_string(sEndlessBestText, "CO-OP  UNRANKED");
+        return sEndlessBestText;
+    }
     if (endless_best_rounds() == 0) {
         endless_append_string(sEndlessBestText, "NO RECORD YET");
         return sEndlessBestText;
     }
     end = endless_append_string(sEndlessBestText, "BEST ");
     end = endless_append_number(end, endless_best_rounds());
-    end = endless_append_string(end, " ROUNDS  ");
-    end = endless_append_number(end, endless_best_score());
-    endless_append_string(end, " PTS");
+    endless_append_string(end, endless_best_rounds() == 1 ? " ROUND" : " ROUNDS");
     return sEndlessBestText;
+}
+
+char *endless_result_text(void) {
+    char *end = endless_append_string(sEndlessResultText, "ROUNDS ");
+
+    end = endless_append_number(end, sEndlessResultRounds);
+    end = endless_append_string(end, "   SCORE ");
+    endless_append_number(end, sEndlessResultScore);
+    return sEndlessResultText;
+}
+
+char *endless_result_detail_text(void) {
+    char *end = endless_append_string(sEndlessResultDetailText, "FINAL ");
+
+    end = endless_append_number(end, sEndlessResultPosition);
+    if (sEndlessResultPosition == 1) {
+        end = endless_append_string(end, "ST");
+    } else if (sEndlessResultPosition == 2) {
+        end = endless_append_string(end, "ND");
+    } else if (sEndlessResultPosition == 3) {
+        end = endless_append_string(end, "RD");
+    } else {
+        end = endless_append_string(end, "TH");
+    }
+    if (gEndlessTimeAttack) {
+        end = endless_append_string(end, "   ");
+        endless_append_string(end, endless_clock_text());
+    }
+    return sEndlessResultDetailText;
 }
 
 char *endless_goal_text(void) {
@@ -792,9 +1056,32 @@ char *endless_goal_text(void) {
  * position that has to be held to survive it.
  */
 char *endless_hud_text(void) {
-    char *end = endless_append_string(sEndlessHudText, "ROUND ");
+    char *end;
+    s32 players = get_number_of_active_players();
+
+    // Quarter-screen viewports need a compact form that still names the team
+    // rule. Horizontal two-player and solo layouts keep the full wording.
+    if (players > 2) {
+        end = endless_append_string(sEndlessHudText, "R");
+        end = endless_append_number(end, gEndlessRound + 1);
+        end = endless_append_string(end, " TEAM ");
+        if (gEndlessTimeAttack) {
+            endless_append_string(end, endless_clock_text() + 5); // Skip "TIME ".
+        } else if (endless_required_position() == 0) {
+            endless_append_string(end, "1ST");
+        } else {
+            end = endless_append_string(end, "TOP ");
+            endless_append_number(end, endless_required_position() + 1);
+        }
+        return sEndlessHudText;
+    }
+
+    end = endless_append_string(sEndlessHudText, "ROUND ");
 
     end = endless_append_number(end, gEndlessRound + 1);
+    if (players > 1) {
+        end = endless_append_string(end, "  TEAM");
+    }
     if (gEndlessTimeAttack) {
         end = endless_append_string(end, "  ");
         endless_append_string(end, endless_clock_text());

@@ -35,13 +35,20 @@ win, three for second, two for third. Bananas raise top speed and are lost on
 every hit, so it is a burst of speed the escalating AI immediately starts
 taking back rather than an edge that snowballs.
 
+With **Events On**, every fourth race adds a seed-selected rule from a safe
+five-event deck: no weapons, no zippers, boost balloons only, shield balloons
+only, or maximum-power pickups. Event selection uses its own stateless hash,
+so it never consumes the track-order RNG. Turning Events Off therefore keeps
+the exact track and mirror sequence that the same seed produced in v0.2.2.
+
 Your round and what you need are on the HUD the whole race, turning red the
 moment you drop out of it.
 
 ### Two ways to lose
 
-Press **Z** on the first round's intro to switch; the choice locks once the run
-is underway.
+Press **Z** on the first round's intro to switch modes. Press **C-Down** there
+to toggle seeded event rounds. Both choices lock once the race starts, so the
+rules cannot change halfway through a run.
 
 - **Survival** — meet the round's required finish position or the run ends.
   It tightens as you go: top 4 (rounds 1-3) → top 3 (4-6) → top 2 (7-9) →
@@ -53,18 +60,38 @@ is underway.
   fixed number of seconds so the rule reads the same on Ancient Lake and on
   Spaceport Alpha.
 
+### Two-player co-op
+
+Two-player Tracks mode treats the run as a team effort. The better human finish
+decides whether Survival continues; in Time Attack, that same racer's finish
+and race time determine the clock adjustment. A head start earned by either
+player is granted to both on the next grid, trophy points are combined on the
+receipt, and both halves of the split screen show the shared **TEAM** status.
+
+Co-op runs are deliberately unranked. The Game Pak has room for the four solo
+rules categories but not another four co-op records, and letting an easier team
+run overwrite a solo best would make the saved depths incomparable.
+
 ### Records and seeds
 
-Points accumulate all run using the trophy scoring table (9/7/5/3/1). Your best
-run is saved to the cartridge and shown on the first round's intro and on the
-game over screen — rounds are the headline record, and score only breaks ties
-between equally deep runs.
+Points accumulate all run using the trophy scoring table (9/7/5/3/1). For solo
+runs, the game saves a separate best depth for each of the four rules
+categories: Survival or Time Attack, each with Events On or Off. The compact
+EEPROM fields top out at 127 cleared rounds and are cleared by erasing Game Pak
+Times. A v0.2 save's shared record is migrated to Survival with Events Off
+because the old save data did not identify which mode earned it.
 
-Every run has a four-digit **seed** that fully determines its track order and
-mirror rolls, so a run can be handed to someone else to race. On the first
-round's intro, **left/right** picks a digit (the one being edited is drawn in
-yellow) and **up/down** turns it, so a seed someone reads out can be dialled in
-directly.
+The game-over screen is a run receipt with the seed and rules, cleared rounds,
+full score, final placement, remaining Time Attack clock, and a new-best flag.
+From there, **Retry Seed** reopens round one with the same seed and rules,
+**New Seed** starts a guaranteed-different one, and **Quit** returns to track
+select. The reopened setup can still be edited before pressing A.
+
+Every run has a four-digit **seed** that fully determines its track order,
+mirror rolls, and event rules when events are enabled, so a run can be handed
+to someone else to race. On the first round's intro, **left/right** picks a
+digit (the one being edited is drawn in yellow) and **up/down** turns it, so a
+seed someone reads out can be dialled in directly.
 
 The screen rebuilds around the new seed about half a second after you stop
 turning digits — the track, the scenery behind it and the music all refresh
@@ -81,8 +108,9 @@ format. T.T. is on the roster from the start.
 All of the mode's own logic lives in [`src/endless.c`](src/endless.c) /
 [`src/endless.h`](src/endless.h). It reuses the existing Trophy Race state
 machine rather than building a new one: `gTrophyRaceRound` is pinned at 0 so
-the vanilla rankings screen always takes its "continue to the next round" path,
-while the real (unbounded) round counter lives in `endless.c`.
+cleared races can reuse the vanilla "continue to the next round" path. Failed
+runs branch into the custom receipt and retry flow, while the real (unbounded)
+round counter lives in `endless.c`.
 
 Integration points are all marked with an `// ENDLESS` comment:
 
@@ -92,15 +120,15 @@ Integration points are all marked with an `// ENDLESS` comment:
 | `menu.c` `trackmenu_assets` | Trophy column force-unlocked |
 | `menu.c` `menu_trophy_race_round_init` | Draws the next track from the shuffle bag |
 | `menu.c` `trophyround_render` | Title, mode, seed, record, goal/clock, round |
-| `menu.c` `menu_trophy_race_round_loop` | Z switches mode, L/R walk the seed |
+| `menu.c` `menu_trophy_race_round_loop` | Z switches mode, C-Down toggles events, stick edits the seed |
 | `menu.c` `menu_trophy_race_rankings_init` | Settles the finished round; sets options |
-| `menu.c` `rankings_render_order` | Round / score / clock / GAME OVER overlay |
-| `menu.c` `menu_trophy_race_rankings_loop` | Continue to next round, or end the run |
-| `menu.c` `get_filtered_cheats` | Mirrored tracks at high rounds |
+| `menu.c` `rankings_render_order` | Live result overlay or final run receipt |
+| `menu.c` `menu_trophy_race_rankings_loop` | Continue, retry seed, choose a new seed, or quit |
+| `menu.c` `get_filtered_cheats` | Mirrored tracks and isolated event rules |
 | `menu.c` `is_tt_unlocked` | T.T. available from the start |
 | `menu.c` `trophyround_adventure`, pause quit, file select | Clear mode state |
 | `game.c` `aitable_init` | AI behaviour table ramp + post-load table scaling |
-| `game_ui.c` `hud_render_general` | In-race status line |
+| `game_ui.c` `hud_render_general` | Solo / two-player team status line |
 | `objects.c` `track_setup_racers` | Applies the banana head start |
 
 ## Building
@@ -130,8 +158,9 @@ Two things worth knowing:
 ## Tuning
 
 Constants at the top of `src/endless.c` cover the AI ramp, the mirroring
-schedule, the head start sizes, and the Time Attack clock and refunds.
-`endless_required_position()` holds the Survival placement schedule.
+schedule, the event cadence, the head start sizes, and the Time Attack clock
+and refunds. `endless_required_position()` holds the Survival placement
+schedule.
 
 ## Notes on the vanilla code
 
@@ -146,9 +175,11 @@ These cost real time to find, so they are written down rather than rediscovered:
   `Racer.lap_times` (a `u16[3]`) in the end-of-race copy in `objects.c`, which
   corrupts the adjacent racer's `trophy_points` — the very field this mode uses
   for scoring.
-- The EEPROM settings word has room to spare: bits 0-25 are the vanilla flags
-  and `write_eeprom_settings` reserves 56-63 for its checksum, leaving 26-55
-  free. The run record lives at 32-55.
+- The EEPROM settings word has exactly 30 spare data bits: bits 0-25 are the
+  vanilla flags and `write_eeprom_settings` reserves 56-63 for its checksum.
+  Bits 26-27 mark the v0.3 layout and 28-55 hold four 7-bit category records.
+  There is not enough room for four persistent scores, so the receipt keeps the
+  full score while the saved personal best is depth-only.
 - The vanilla rankings screen sets an option count of three while only filling
   two entries, so a stale pointer gets drawn as a third option.
 
@@ -156,6 +187,6 @@ These cost real time to find, so they are written down rather than rediscovered:
 
 - The intro screen's rows are full. Anything else shown there will need the
   block re-laid-out again.
-- No leaderboard or ghost sharing beyond the seed.
-- Multiplayer is untested; the in-race status line is single-player only, since
-  it is positioned in screen coordinates.
+- No leaderboard or ghost sharing beyond the seed and run receipt.
+- Three- and four-player Endless are not yet supported; their quarter-screen
+  HUD needs a shorter status layout and a separate record policy.

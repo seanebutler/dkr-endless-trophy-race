@@ -8,15 +8,16 @@
 /**
  * @file Endless Trophy Race mode.
  *
- * An arcade-style survival mode built on top of the Trophy Race state machine:
- * an infinite sequence of randomly drawn races where the AI gets faster and
- * more aggressive every round, the required finishing position tightens, and
- * tracks eventually mirror. The run ends the first time the player misses the
- * required position. Entered from the Tracks menu trophy race column, which
- * this hack repurposes.
+ * An arcade-style mode built on top of the Trophy Race state machine: an
+ * infinite sequence of seeded races where the AI escalates, tracks eventually
+ * mirror, and optional seeded event rules appear. Survival ends on a missed
+ * placement; Time Attack ends when the run clock expires. Entered from the
+ * Tracks menu trophy race column, which this hack repurposes.
  */
 
 void endless_start(void);
+void endless_retry_seed(void);
+void endless_new_seed(void);
 void endless_stop(void);
 s32 endless_is_active(void);
 s32 endless_round(void);
@@ -35,27 +36,36 @@ void endless_set_seed(s32 seed);
 void endless_seed_move_digit(s32 delta);
 void endless_seed_change_digit(s32 delta);
 void endless_seed_mark_dirty(void);
+void endless_seed_clear_dirty(void);
 s32 endless_seed_refresh_pending(void);
 s32 endless_seed_refresh_due(s32 updateRate);
 s32 endless_time_attack(void);
 void endless_toggle_time_attack(void);
+s32 endless_events_enabled(void);
+void endless_toggle_events(void);
+s32 endless_event_active(void);
+s32 endless_event_cheats(void);
 s32 endless_clock(void);
 s32 endless_run_continues(void);
-void endless_round_finished(void);
+void endless_round_finished(s32 roundPoints);
 s32 endless_ai_level(s32 baseLevel);
 void endless_scale_ai_table(AIBehaviourTable *table);
 s32 endless_score(void);
 s32 endless_best_rounds(void);
-s32 endless_best_score(void);
-void endless_record_run(s32 roundsCleared);
+s32 endless_record_run(s32 roundsCleared);
+void endless_clear_records(void);
+s32 endless_new_best(void);
 char *endless_round_text(void);
 char *endless_score_text(void);
+char *endless_result_text(void);
+char *endless_result_detail_text(void);
 char *endless_goal_text(void);
 char *endless_hud_text(void);
 char *endless_best_text(void);
 char *endless_perk_text(void);
 char *endless_clock_text(void);
 char *endless_mode_text(void);
+char *endless_event_text(void);
 char *endless_seed_prefix_text(void);
 char *endless_seed_digit_text(void);
 

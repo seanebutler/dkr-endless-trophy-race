@@ -4771,6 +4771,9 @@ SIDeviceStatus savemenu_write(void) {
                 mark_to_write_flap_and_course_times();
                 unset_eeprom_settings_value(
                     0xFFFFF0); // Reset most eeprom save data, but keep Adventure 2, and Drumstick.
+                // ENDLESS: its categorized depths are records too. Keep them
+                // tied to the visible Game Pak TIMES erase action.
+                endless_clear_records();
 #if VERSION >= VERSION_79
                 gActiveMagicCodes &= ~CHEAT_CONTROL_TT;
                 gUnlockedMagicCodes &= ~CHEAT_CONTROL_TT;
@@ -12081,10 +12084,20 @@ void trophyround_render(UNUSED s32 updateRate) {
                       yPos + 104, endless_seed_digit_text(), ALIGN_MIDDLE_CENTER);
             set_text_colour(255, 255, 255, 0, 255);
             draw_text(&sMenuCurrDisplayList, SCREEN_WIDTH_HALF, yPos + 120, endless_best_text(), ALIGN_MIDDLE_CENTER);
-            draw_text(&sMenuCurrDisplayList, SCREEN_WIDTH_HALF, yPos + 136, "Z: MODE    STICK: SEED",
+            draw_text(&sMenuCurrDisplayList, SCREEN_WIDTH_HALF, yPos + 136,
+                      "Z:MODE  C-DOWN:EVENTS  STICK:SEED",
                       ALIGN_MIDDLE_CENTER);
-        } else if (endless_perk_bananas() > 0) {
-            draw_text(&sMenuCurrDisplayList, SCREEN_WIDTH_HALF, yPos + 120, endless_perk_text(), ALIGN_MIDDLE_CENTER);
+        } else {
+            if (endless_event_active()) {
+                set_text_colour(255, 224, 64, 200, 255);
+                draw_text(&sMenuCurrDisplayList, SCREEN_WIDTH_HALF, yPos + 104, endless_event_text(),
+                          ALIGN_MIDDLE_CENTER);
+                set_text_colour(255, 255, 255, 0, 255);
+            }
+            if (endless_perk_bananas() > 0) {
+                draw_text(&sMenuCurrDisplayList, SCREEN_WIDTH_HALF, yPos + 120, endless_perk_text(),
+                          ALIGN_MIDDLE_CENTER);
+            }
         }
         set_text_font(ASSET_FONTS_BIGFONT);
     } else {
@@ -12129,13 +12142,16 @@ s32 menu_trophy_race_round_loop(s32 updateRate) {
     }
     if ((gIgnorePlayerInputTime == 0) && (gMenuDelay == 0)) {
         menu_input();
-        // ENDLESS: on the first round only, Z switches between Survival and
-        // Time Attack, and the stick dials in a seed one digit at a time so a
-        // specific run can be typed in rather than counted up to. Once a run is
-        // underway both are locked in.
+        // ENDLESS: on the first round only, Z switches mode, C-Down switches
+        // seeded events, and the stick dials in a seed one digit at a time.
+        // Once the run leaves this intro all three settings are locked in.
         if (endless_is_active() && endless_round() == 0) {
             if ((gMenuButtons[PLAYER_MENU] & Z_TRIG) != 0) {
                 endless_toggle_time_attack();
+                sound_play(SOUND_MENU_PICK2, NULL);
+            }
+            if ((gMenuButtons[PLAYER_MENU] & D_CBUTTONS) != 0) {
+                endless_toggle_events();
                 sound_play(SOUND_MENU_PICK2, NULL);
             }
             if (gMenuStickX[PLAYER_MENU] != 0) {
@@ -12168,6 +12184,7 @@ s32 menu_trophy_race_round_loop(s32 updateRate) {
             // the player set and could not be handed to anyone else.
             if (endless_is_active() && endless_seed_refresh_pending()) {
                 trophyround_reseed_track();
+                endless_seed_clear_dirty();
             }
             transition_begin(&sMenuTransitionFadeIn);
             gMenuDelay = 1;
@@ -12283,6 +12300,7 @@ void menu_trophy_race_rankings_init(void) {
     s32 j;
     s32 ranking[8];
     s32 tempForSwap;
+    s32 roundPoints;
     Settings *settings;
     s8 *trackMenuIds;
 
@@ -12307,21 +12325,33 @@ void menu_trophy_race_rankings_init(void) {
     }
 
     // ENDLESS: settle the finished round once, here, so this screen and the
-    // exit branch that follows it agree on whether the run lived.
+    // exit branch that follows it agree on whether the run lived. Trophy
+    // points are animated into the racer totals later, so project the current
+    // human awards now for an accurate save and final receipt without
+    // pre-adding them and making the vanilla animation award them twice.
     if (endless_is_active()) {
-        endless_round_finished();
+        roundPoints = 0;
+        for (i = 0; i < gNumberOfActivePlayers; i++) {
+            j = settings->racers[i].starting_position;
+            if (j >= 0 && j < ARRAY_COUNT(gTrophyRacePointsArray)) {
+                roundPoints += gTrophyRacePointsArray[j];
+            }
+        }
+        endless_round_finished(roundPoints);
     }
-    // One honest option. The vanilla branch below offers CONTINUE and QUIT
-    // TROPHY RACE (and counts three while only setting two, leaving a stale
-    // pointer to be drawn), but in this mode the choice does not exist:
-    // surviving always continues and failing always ends the run.
+    // A cleared round continues automatically. Failure replaces the vanilla
+    // championship choices with the Endless receipt's retry/new-seed/quit
+    // flow, avoiding the stale third pointer in the original option table.
     if (endless_is_active()) {
         if (endless_run_continues()) {
             gResultOptionText[0] = gMenuText[ASSET_MENU_TEXT_CONTINUE];
+            gResultOptionCount = 1;
         } else {
-            gResultOptionText[0] = gMenuText[ASSET_MENU_TEXT_QUIT];
+            gResultOptionText[0] = "RETRY SEED";
+            gResultOptionText[1] = "NEW SEED";
+            gResultOptionText[2] = gMenuText[ASSET_MENU_TEXT_QUIT];
+            gResultOptionCount = 3;
         }
-        gResultOptionCount = 1;
     } else if (gTrophyRaceRound < 4) {
         gResultOptionText[0] = gMenuText[ASSET_MENU_TEXT_CONTINUE];
         gResultOptionText[1] = gMenuText[ASSET_MENU_TEXT_QUITTROPHYRACE];
@@ -12395,6 +12425,45 @@ void menu_trophy_race_rankings_init(void) {
     postrace_offsets(gTrophyRankingsTitle, 0.5f, 20.0f, 0.5f, 0, 0);
 }
 
+static void endless_receipt_draw_line(s32 y, char *text, s32 red, s32 green, s32 blue) {
+    set_text_colour(0, 0, 0, 255, 128);
+    draw_text(&sMenuCurrDisplayList, SCREEN_WIDTH_HALF + 1, y + 1, text, ALIGN_MIDDLE_CENTER);
+    set_text_colour(red, green, blue, 0, 255);
+    draw_text(&sMenuCurrDisplayList, SCREEN_WIDTH_HALF, y, text, ALIGN_MIDDLE_CENTER);
+}
+
+/**
+ * Replace the now-irrelevant championship table with a compact, shareable run
+ * receipt and visible rematch choices once an Endless run is over.
+ */
+static void endless_rankings_render_receipt(s32 highlight) {
+    s32 i;
+    s32 optionY;
+
+    set_text_background_colour(0, 0, 0, 0);
+    set_text_font(ASSET_FONTS_BIGFONT);
+    endless_receipt_draw_line(32, "GAME OVER", 255, 64, 64);
+    set_text_font(ASSET_FONTS_FUNFONT);
+    endless_receipt_draw_line(64, endless_mode_text(), 255, 255, 255);
+    endless_receipt_draw_line(88, endless_result_text(), 255, 255, 255);
+    endless_receipt_draw_line(104, endless_result_detail_text(), 255, 255, 255);
+    endless_receipt_draw_line(128, endless_new_best() ? "NEW BEST" : endless_best_text(), 255, 224, 96);
+
+    optionY = 168;
+    for (i = 0; i < gResultOptionCount; i++) {
+        set_text_colour(0, 0, 0, 255, 128);
+        draw_text(&sMenuCurrDisplayList, SCREEN_WIDTH_HALF + 1, optionY + 1, gResultOptionText[i],
+                  ALIGN_MIDDLE_CENTER);
+        if (i == gMenuOption) {
+            set_text_colour(255, 224, 64, (highlight >> 1) + 128, 255);
+        } else {
+            set_text_colour(255, 255, 255, 0, 255);
+        }
+        draw_text(&sMenuCurrDisplayList, SCREEN_WIDTH_HALF, optionY, gResultOptionText[i], ALIGN_MIDDLE_CENTER);
+        optionY += 16;
+    }
+}
+
 /**
  * Update the player portrait highlight.
  * If the championship order is visible, render the portraits.
@@ -12404,6 +12473,7 @@ void rankings_render_order(s32 updateRate) {
     s32 stage;
     s32 fade;
     s32 i;
+    s32 survived;
     UNUSED s32 pad;
 
     gOptionBlinkTimer = (gOptionBlinkTimer + updateRate) & 0x3F;
@@ -12429,47 +12499,32 @@ void rankings_render_order(s32 updateRate) {
 #endif
     }
     stage = gMenuStage;
+    survived = !endless_is_active() || endless_run_continues();
+    if (!survived) {
+        if (stage == RANKINGS_ORDER || stage == RANKINGS_EXIT) {
+            endless_rankings_render_receipt(highlight);
+        }
+        return;
+    }
     if (stage == RANKINGS_ORDER || stage == RANKINGS_EXIT) {
         draw_menu_elements(1, gTrophyRankingsTitle, 1.0f);
     }
     // ENDLESS: overlay the run status on the rankings screen.
     if (endless_is_active()) {
-        char *headline;
-        s32 survived = endless_run_continues();
-
-        if (survived) {
-            headline = endless_round_text();
-        } else {
-            headline = "GAME OVER";
-        }
         set_text_background_colour(0, 0, 0, 0);
         // FUNFONT has digit glyphs; BIGFONT is letters-only.
         set_text_font(ASSET_FONTS_FUNFONT);
         set_text_colour(0, 0, 0, 255, 128);
-        draw_text(&sMenuCurrDisplayList, SCREEN_WIDTH_HALF + 1, 17, headline, ALIGN_MIDDLE_CENTER);
+        draw_text(&sMenuCurrDisplayList, SCREEN_WIDTH_HALF + 1, 17, endless_round_text(), ALIGN_MIDDLE_CENTER);
         draw_text(&sMenuCurrDisplayList, SCREEN_WIDTH_HALF + 1, 33, endless_score_text(), ALIGN_MIDDLE_CENTER);
-        if (survived) {
-            set_text_colour(255, 255, 255, 0, 255);
-        } else {
-            set_text_colour(255, 64, 64, 0, 255);
-        }
-        draw_text(&sMenuCurrDisplayList, SCREEN_WIDTH_HALF, 16, headline, ALIGN_MIDDLE_CENTER);
+        set_text_colour(255, 255, 255, 0, 255);
+        draw_text(&sMenuCurrDisplayList, SCREEN_WIDTH_HALF, 16, endless_round_text(), ALIGN_MIDDLE_CENTER);
         set_text_colour(255, 255, 255, 0, 255);
         draw_text(&sMenuCurrDisplayList, SCREEN_WIDTH_HALF, 32, endless_score_text(), ALIGN_MIDDLE_CENTER);
         // In Time Attack the clock has just been settled against this race, so
         // this is where the player finds out what the result cost or bought.
         if (endless_time_attack()) {
             draw_text(&sMenuCurrDisplayList, SCREEN_WIDTH_HALF, 48, endless_clock_text(), ALIGN_MIDDLE_CENTER);
-        }
-        // The run is over -- show the record it was measured against.
-        if (!survived) {
-            s32 bestY = endless_time_attack() ? 64 : 48;
-
-            set_text_colour(0, 0, 0, 255, 128);
-            draw_text(&sMenuCurrDisplayList, SCREEN_WIDTH_HALF + 1, bestY + 1, endless_best_text(),
-                      ALIGN_MIDDLE_CENTER);
-            set_text_colour(255, 224, 96, 0, 255);
-            draw_text(&sMenuCurrDisplayList, SCREEN_WIDTH_HALF, bestY, endless_best_text(), ALIGN_MIDDLE_CENTER);
         }
     }
 }
@@ -12509,23 +12564,29 @@ s32 menu_trophy_race_rankings_loop(s32 updateRate) {
         case RANKINGS_SWAP:
             if (postrace_render(updateRate)) {
                 gMenuStage = RANKINGS_ORDER;
-                draw_menu_elements(1, gTrophyRankingsTitle, 1.0f);
+                if (!endless_is_active() || endless_run_continues()) {
+                    draw_menu_elements(1, gTrophyRankingsTitle, 1.0f);
+                }
             }
             break;
         case RANKINGS_ORDER:
-            gOpacityDecayTimer += updateRate;
-            if (gOpacityDecayTimer > 10) {
-                gOpacityDecayTimer -= 10;
-                playSound = FALSE;
-                for (i = 0; i < gRankingPlayerCount; i++) {
-                    if (gRankingsPoints[i] > 0) {
-                        gRankingsPoints[i]--;
-                        playSound = TRUE;
-                        settings->racers[i].trophy_points++;
+            // A failed Endless run shows the fixed receipt score instead of
+            // the championship table, so do not audibly count hidden points.
+            if (!endless_is_active() || endless_run_continues()) {
+                gOpacityDecayTimer += updateRate;
+                if (gOpacityDecayTimer > 10) {
+                    gOpacityDecayTimer -= 10;
+                    playSound = FALSE;
+                    for (i = 0; i < gRankingPlayerCount; i++) {
+                        if (gRankingsPoints[i] > 0) {
+                            gRankingsPoints[i]--;
+                            playSound = TRUE;
+                            settings->racers[i].trophy_points++;
+                        }
                     }
-                }
-                if (playSound) {
-                    sound_play(SOUND_TING_HIGH, NULL);
+                    if (playSound) {
+                        sound_play(SOUND_TING_HIGH, NULL);
+                    }
                 }
             }
 
@@ -12564,12 +12625,20 @@ s32 menu_trophy_race_rankings_loop(s32 updateRate) {
                 rankings_free();
                 dialogue_close(7);
                 dialogue_clear(7);
-                // ENDLESS: survive -> next round forever; miss the required
-                // position -> the run is over, back to the track select menu.
+                // ENDLESS: survive -> next round forever. Game over can reset
+                // directly into the same seed, a guaranteed-new seed, or quit.
                 if (endless_is_active()) {
                     // The round was already settled when this screen opened.
                     if (endless_run_continues()) {
                         endless_advance_round();
+                        menu_init(MENU_TROPHY_RACE_ROUND);
+                    } else if (gMenuOption == 0) {
+                        gTrophyRaceRound = 0;
+                        endless_retry_seed();
+                        menu_init(MENU_TROPHY_RACE_ROUND);
+                    } else if (gMenuOption == 1) {
+                        gTrophyRaceRound = 0;
+                        endless_new_seed();
                         menu_init(MENU_TROPHY_RACE_ROUND);
                     } else {
                         endless_stop();
@@ -13850,11 +13919,17 @@ void set_magic_code_flags(s32 flags) {
       CHEAT_ALL_BALLOONS_ARE_GREEN | CHEAT_ALL_BALLOONS_ARE_BLUE | CHEAT_ALL_BALLOONS_ARE_YELLOW |               \
       CHEAT_ALL_BALLOONS_ARE_RAINBOW)
 
+#define ENDLESS_EVENT_POWERUP_CHEATS                                                                            \
+    (CHEAT_DISABLE_WEAPONS | CHEAT_ALL_BALLOONS_ARE_RED | CHEAT_ALL_BALLOONS_ARE_GREEN |                       \
+     CHEAT_ALL_BALLOONS_ARE_BLUE | CHEAT_ALL_BALLOONS_ARE_YELLOW | CHEAT_ALL_BALLOONS_ARE_RAINBOW |           \
+     CHEAT_MAXIMUM_POWER_UP)
+
 /**
  * Filters active cheats based on different conditions. Also enables mirroring for Adventure 2.
  */
 s32 get_filtered_cheats(void) {
     s32 cheats = gActiveMagicCodes;
+    s32 eventCheats;
     if (!gIsInTracksMode || is_time_trial_enabled()) {
         cheats &= CHEATS_ALLOWED_IN_ADVENTURE_AND_TIME_TRIAL;
     }
@@ -13870,6 +13945,16 @@ s32 get_filtered_cheats(void) {
     // ENDLESS: high rounds run mirrored tracks, like Adventure Two.
     if (endless_is_active() && endless_mirrored() && level_is_race()) {
         cheats |= CHEAT_MIRRORED_TRACKS;
+    }
+    // Seeded events borrow the native magic-code rules without changing the
+    // player's active codes. Power-up events replace that mutually-exclusive
+    // family for this race, then the player's original codes resume next time.
+    if (endless_is_active() && level_is_race()) {
+        eventCheats = endless_event_cheats();
+        if (eventCheats & ENDLESS_EVENT_POWERUP_CHEATS) {
+            cheats &= ~ENDLESS_EVENT_POWERUP_CHEATS;
+        }
+        cheats |= eventCheats;
     }
     return cheats;
 }

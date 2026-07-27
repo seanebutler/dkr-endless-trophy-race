@@ -90,3 +90,6 @@ CLAUDE.local.md
 .mcp.json
 .claude-*
 claude-*.log
+
+# Built patches
+dist/
