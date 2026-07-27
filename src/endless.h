@@ -30,6 +30,8 @@ s32 endless_position_is_safe(s32 racePosition);
 s32 endless_mirrored(void);
 void endless_award_perk(void);
 s32 endless_perk_bananas(void);
+s32 endless_seed(void);
+void endless_set_seed(s32 seed);
 s32 endless_time_attack(void);
 void endless_toggle_time_attack(void);
 s32 endless_clock(void);

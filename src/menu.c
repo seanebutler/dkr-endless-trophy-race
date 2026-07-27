@@ -12038,19 +12038,23 @@ void trophyround_render(UNUSED s32 updateRate) {
         // Time Attack lives or dies by the clock, so the clock takes the line
         // the placement requirement uses in Survival.
         if (endless_time_attack()) {
-            draw_text(&sMenuCurrDisplayList, SCREEN_WIDTH_HALF, yPos + 144, endless_clock_text(), ALIGN_MIDDLE_CENTER);
+            draw_text(&sMenuCurrDisplayList, SCREEN_WIDTH_HALF, yPos + 152, endless_clock_text(), ALIGN_MIDDLE_CENTER);
         } else {
-            draw_text(&sMenuCurrDisplayList, SCREEN_WIDTH_HALF, yPos + 144, endless_goal_text(), ALIGN_MIDDLE_CENTER);
+            draw_text(&sMenuCurrDisplayList, SCREEN_WIDTH_HALF, yPos + 152, endless_goal_text(), ALIGN_MIDDLE_CENTER);
         }
-        // At the start of a run, the mode (which is also the only prompt for
-        // switching it) and the record to beat; after that, whatever head start
-        // the last round earned. Repeating the record every round would just be
-        // noise once the run is underway.
+        // The run's setup, the record to beat, and how to change either -- but
+        // only before the run starts. Afterwards the block collapses to the
+        // head start the last round earned, since the rest is settled and
+        // repeating it every round would just be noise.
+        //
+        // These rows start clear of the BIGFONT title above them; adding
+        // another one here will start overlapping it.
         if (endless_round() == 0) {
-            draw_text(&sMenuCurrDisplayList, SCREEN_WIDTH_HALF, yPos + 96, endless_mode_text(), ALIGN_MIDDLE_CENTER);
-            draw_text(&sMenuCurrDisplayList, SCREEN_WIDTH_HALF, yPos + 112, endless_best_text(), ALIGN_MIDDLE_CENTER);
+            draw_text(&sMenuCurrDisplayList, SCREEN_WIDTH_HALF, yPos + 104, endless_mode_text(), ALIGN_MIDDLE_CENTER);
+            draw_text(&sMenuCurrDisplayList, SCREEN_WIDTH_HALF, yPos + 120, endless_best_text(), ALIGN_MIDDLE_CENTER);
+            draw_text(&sMenuCurrDisplayList, SCREEN_WIDTH_HALF, yPos + 136, "Z: MODE    L/R: SEED", ALIGN_MIDDLE_CENTER);
         } else if (endless_perk_bananas() > 0) {
-            draw_text(&sMenuCurrDisplayList, SCREEN_WIDTH_HALF, yPos + 112, endless_perk_text(), ALIGN_MIDDLE_CENTER);
+            draw_text(&sMenuCurrDisplayList, SCREEN_WIDTH_HALF, yPos + 120, endless_perk_text(), ALIGN_MIDDLE_CENTER);
         }
         set_text_font(ASSET_FONTS_BIGFONT);
     } else {
@@ -12095,11 +12099,30 @@ s32 menu_trophy_race_round_loop(s32 updateRate) {
     }
     if ((gIgnorePlayerInputTime == 0) && (gMenuDelay == 0)) {
         menu_input();
-        // ENDLESS: Z switches between Survival and Time Attack, but only on the
-        // first round -- once a run is underway the rules are locked in.
-        if (endless_is_active() && endless_round() == 0 && (gMenuButtons[PLAYER_MENU] & Z_TRIG) != 0) {
-            endless_toggle_time_attack();
-            sound_play(SOUND_MENU_PICK2, NULL);
+        // ENDLESS: on the first round only, Z switches between Survival and
+        // Time Attack and the shoulder buttons walk the seed, so a run can be
+        // handed to someone else to race. Once a run is underway both are
+        // locked in.
+        if (endless_is_active() && endless_round() == 0) {
+            if ((gMenuButtons[PLAYER_MENU] & Z_TRIG) != 0) {
+                endless_toggle_time_attack();
+                sound_play(SOUND_MENU_PICK2, NULL);
+            }
+            // L moves in hundreds so a four digit seed is reachable. The whole
+            // screen is rebuilt afterwards because the first track was already
+            // drawn from the old seed -- without this the name and the preview
+            // behind it would describe a race the new seed is not going to run.
+            if ((gMenuButtons[PLAYER_MENU] & (L_TRIG | R_TRIG)) != 0) {
+                if (gMenuButtons[PLAYER_MENU] & L_TRIG) {
+                    endless_set_seed(endless_seed() + 100);
+                } else {
+                    endless_set_seed(endless_seed() + 1);
+                }
+                sound_play(SOUND_MENU_PICK2, NULL);
+                trophyround_free();
+                menu_init(MENU_TROPHY_RACE_ROUND);
+                return MENU_RESULT_CONTINUE;
+            }
         }
         if ((gMenuButtons[PLAYER_MENU] & (A_BUTTON | START_BUTTON)) != 0) {
             transition_begin(&sMenuTransitionFadeIn);

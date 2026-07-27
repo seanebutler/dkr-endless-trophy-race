@@ -47,6 +47,9 @@
 #define ENDLESS_TA_PCT_FOURTH (-10)
 #define ENDLESS_TA_PCT_REST (-25)
 
+// Seeds are four digits so they can be read out loud and typed back in.
+#define ENDLESS_SEED_MAX 9999
+
 // Where the run record lives in the EEPROM settings word. Bits 0-25 are the
 // vanilla flags (Adventure Two, Drumstick, language, T.T. course times,
 // subtitles) and write_eeprom_settings reserves bits 56-63 for its checksum,
@@ -72,6 +75,7 @@ s32 gEndlessMirrorThisRace = FALSE;
 s32 gEndlessPerkBananas = 0;
 s32 gEndlessTimeAttack = FALSE; // Kept between runs: it is a preference.
 s32 gEndlessClock = 0;
+s32 gEndlessSeed = 0;
 
 /*******************************/
 
@@ -90,8 +94,37 @@ static char sEndlessPerkText[32];
 static char sEndlessClockText[24];
 static char sEndlessModeText[32];
 static s32 sEndlessLastTrack;
+static u32 sEndlessRngState;
 
 /******************************/
+
+/**
+ * The run's own random stream. The game's shared rand_range is advanced by
+ * everything from particles to AI decisions, so a run drawn from it could
+ * never be reproduced; this keeps the track order and mirror rolls dependent
+ * on nothing but the seed.
+ */
+static void endless_rng_seed(s32 seed) {
+    // Spread the low-entropy display seed across the whole word, or seeds 1
+    // and 2 would open with near-identical draws.
+    sEndlessRngState = ((u32) seed * 2654435761U) + 1U;
+}
+
+static u32 endless_rng_next(void) {
+    sEndlessRngState = (sEndlessRngState * 1664525U) + 1013904223U;
+    // The high bits of an LCG are far better distributed than the low ones.
+    return sEndlessRngState >> 16;
+}
+
+/**
+ * Random value in [0, max], matching rand_range's inclusive contract.
+ */
+static s32 endless_rng_range(s32 max) {
+    if (max <= 0) {
+        return 0;
+    }
+    return (s32) (endless_rng_next() % (u32) (max + 1));
+}
 
 /**
  * Append a decimal number to a string buffer. Returns the new end pointer.
@@ -169,7 +202,7 @@ static void endless_shuffle_pool(void) {
     s8 temp;
 
     for (i = sEndlessPoolSize - 1; i > 0; i--) {
-        j = rand_range(0, i);
+        j = endless_rng_range(i);
         temp = sEndlessPool[i];
         sEndlessPool[i] = sEndlessPool[j];
         sEndlessPool[j] = temp;
@@ -191,12 +224,12 @@ void endless_start(void) {
     gEndlessMirrorThisRace = FALSE;
     gEndlessPerkBananas = 0;
     gEndlessClock = normalise_time(ENDLESS_TA_START_SECONDS * ENDLESS_TICKS_PER_SECOND);
-    sEndlessLastTrack = -1;
-    endless_build_pool();
-    endless_shuffle_pool();
     for (i = 0; i < 8; i++) {
         settings->racers[i].trophy_points = 0;
     }
+    // A fresh run gets a random seed; this also builds and shuffles the bag.
+    // The player can still change it on the first round's intro.
+    endless_set_seed(rand_range(0, ENDLESS_SEED_MAX));
 }
 
 void endless_stop(void) {
@@ -244,7 +277,7 @@ s32 endless_pick_track(void) {
     if (gEndlessRound >= ENDLESS_MIRROR_ALWAYS_ROUND) {
         gEndlessMirrorThisRace = TRUE;
     } else if (gEndlessRound >= ENDLESS_MIRROR_CHANCE_ROUND) {
-        gEndlessMirrorThisRace = rand_range(0, 1);
+        gEndlessMirrorThisRace = endless_rng_range(1);
     } else {
         gEndlessMirrorThisRace = FALSE;
     }
@@ -327,6 +360,30 @@ void endless_award_perk(void) {
 
 s32 endless_perk_bananas(void) {
     return gEndlessPerkBananas;
+}
+
+s32 endless_seed(void) {
+    return gEndlessSeed;
+}
+
+/**
+ * Point the run at a seed and rebuild the draw order from it. Safe to call
+ * while the player is still on the first round's intro, which is the only
+ * place the seed can be changed -- the bag is rebuilt from scratch each time,
+ * so the same seed always produces the same run.
+ */
+void endless_set_seed(s32 seed) {
+    while (seed < 0) {
+        seed += ENDLESS_SEED_MAX + 1;
+    }
+    while (seed > ENDLESS_SEED_MAX) {
+        seed -= ENDLESS_SEED_MAX + 1;
+    }
+    gEndlessSeed = seed;
+    endless_rng_seed(seed);
+    endless_build_pool();
+    endless_shuffle_pool();
+    sEndlessLastTrack = -1;
 }
 
 s32 endless_time_attack(void) {
@@ -417,15 +474,19 @@ char *endless_clock_text(void) {
 }
 
 /**
- * The mode line on the first round's intro, which doubles as the prompt for
- * switching -- there is no menu for this, so the screen has to say so.
+ * Mode and seed share a line on the first round's intro. They are the two
+ * things chosen there, and the intro has to fit them between the title and the
+ * track name without crowding either.
  */
 char *endless_mode_text(void) {
+    char *end;
+
     if (gEndlessTimeAttack) {
-        endless_append_string(sEndlessModeText, "TIME ATTACK    Z: SURVIVAL");
+        end = endless_append_string(sEndlessModeText, "TIME ATTACK   SEED ");
     } else {
-        endless_append_string(sEndlessModeText, "SURVIVAL    Z: TIME ATTACK");
+        end = endless_append_string(sEndlessModeText, "SURVIVAL   SEED ");
     }
+    endless_append_number(end, gEndlessSeed);
     return sEndlessModeText;
 }
 
