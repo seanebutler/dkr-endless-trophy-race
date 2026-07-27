@@ -3683,8 +3683,7 @@ void hud_render_general(Gfx **dList, Mtx **mtx, Vertex **vtx, s32 updateRate) {
     } else if (gHudToggleSettings[gHUDNumPlayers] != 1) {
         // ENDLESS status is independent of the minimap toggle. The old hook
         // lived below this return, so hiding the map also hid the run state.
-        if (endless_is_active() && gNumActivePlayers <= 2 &&
-            gHudLevelHeader->race_type == RACETYPE_DEFAULT) {
+        if (endless_is_active() && gHudLevelHeader->race_type == RACETYPE_DEFAULT) {
             rendermode_reset(&gHudDL);
             mtx_ortho(&gHudDL, &gHudMtx);
             hud_endless_status(objectGroup, objectCount);
@@ -3853,7 +3852,7 @@ void hud_render_general(Gfx **dList, Mtx **mtx, Vertex **vtx, s32 updateRate) {
         }
     }
     // ENDLESS: run status sits on top of everything else the HUD drew.
-    if (endless_is_active() && gNumActivePlayers <= 2 && gHudLevelHeader->race_type == RACETYPE_DEFAULT) {
+    if (endless_is_active() && gHudLevelHeader->race_type == RACETYPE_DEFAULT) {
         rendermode_reset(&gHudDL);
         hud_endless_status(objectGroup, objectCount);
     }

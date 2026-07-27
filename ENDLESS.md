@@ -60,13 +60,14 @@ rules cannot change halfway through a run.
   fixed number of seconds so the rule reads the same on Ancient Lake and on
   Spaceport Alpha.
 
-### Two-player co-op
+### Multiplayer co-op
 
-Two-player Tracks mode treats the run as a team effort. The better human finish
-decides whether Survival continues; in Time Attack, that same racer's finish
-and race time determine the clock adjustment. A head start earned by either
-player is granted to both on the next grid, trophy points are combined on the
-receipt, and both halves of the split screen show the shared **TEAM** status.
+Multiplayer Tracks mode treats two to four humans as a team. The best human
+finish decides whether Survival continues; in Time Attack, that same racer's
+finish and race time determine the clock adjustment. A head start earned by
+any player is granted to everyone on the next grid, trophy points are combined
+on the receipt, and every viewport shows the shared **TEAM** status. The
+quarter-screen layouts use a shorter version of the same line.
 
 Co-op runs are deliberately unranked. The Game Pak has room for the four solo
 rules categories but not another four co-op records, and letting an easier team
@@ -128,7 +129,7 @@ Integration points are all marked with an `// ENDLESS` comment:
 | `menu.c` `is_tt_unlocked` | T.T. available from the start |
 | `menu.c` `trophyround_adventure`, pause quit, file select | Clear mode state |
 | `game.c` `aitable_init` | AI behaviour table ramp + post-load table scaling |
-| `game_ui.c` `hud_render_general` | Solo / two-player team status line |
+| `game_ui.c` `hud_render_general` | Solo / multiplayer team status line |
 | `objects.c` `track_setup_racers` | Applies the banana head start |
 
 ## Building
@@ -188,5 +189,5 @@ These cost real time to find, so they are written down rather than rediscovered:
 - The intro screen's rows are full. Anything else shown there will need the
   block re-laid-out again.
 - No leaderboard or ghost sharing beyond the seed and run receipt.
-- Three- and four-player Endless are not yet supported; their quarter-screen
-  HUD needs a shorter status layout and a separate record policy.
+- Interface strings added by the hack are English-only until they move into the
+  localized menu asset pipeline.
