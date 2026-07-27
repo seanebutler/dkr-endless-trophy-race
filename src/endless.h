@@ -69,6 +69,7 @@ char *endless_hud_text(void);
 char *endless_best_text(void);
 char *endless_perk_text(void);
 char *endless_clock_text(void);
+char *endless_speed_text(s32 speed);
 char *endless_mode_text(void);
 char *endless_event_text(void);
 char *endless_seed_prefix_text(void);

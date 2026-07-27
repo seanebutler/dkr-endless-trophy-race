@@ -137,6 +137,7 @@ static char sEndlessHudText[48];
 static char sEndlessBestText[32];
 static char sEndlessPerkText[32];
 static char sEndlessClockText[24];
+static char sEndlessSpeedText[16];
 static char sEndlessModeText[40];
 static char sEndlessResultText[40];
 static char sEndlessResultDetailText[40];
@@ -668,7 +669,15 @@ s32 endless_bounty_active(void) {
     if (!gEndlessActive || !gEndlessEventsEnabled) {
         return FALSE;
     }
-    return gEndlessTrackId >= 0 && leveltable_type(gEndlessTrackId) == RACETYPE_DEFAULT;
+    if (gEndlessTrackId < 0 || leveltable_type(gEndlessTrackId) != RACETYPE_DEFAULT) {
+        return FALSE;
+    }
+    // The eight coins are placed along the route the track's own vehicle takes.
+    // Fly the same course and some of them sit somewhere a plane never passes,
+    // which would put an objective on screen that cannot be completed. So the
+    // bounty only runs when the gauntlet's draw happens to match the vehicle
+    // the coins were laid out for -- always, on single-vehicle tracks.
+    return endless_vehicle() == leveltable_vehicle_default(gEndlessTrackId);
 }
 
 /**
@@ -681,6 +690,17 @@ void endless_note_coins(s32 coins) {
     if (gEndlessActive && coins >= ENDLESS_BOUNTY_COINS) {
         sEndlessBountyClaimed = TRUE;
     }
+}
+
+/**
+ * Digital speed readout for the in-race HUD, in the same units the vanilla
+ * speedometer needle sweeps, so a full gauge and a full number agree.
+ */
+char *endless_speed_text(s32 speed) {
+    char *end = endless_append_string(sEndlessSpeedText, "SPEED ");
+
+    endless_append_number(end, speed);
+    return sEndlessSpeedText;
 }
 
 s32 endless_bounty_claimed(void) {

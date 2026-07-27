@@ -61,6 +61,13 @@ nothing, so each mode keeps exactly one way to end a run. What they add is a
 second racing line worth weighing against position, since the detour to a coin
 is usually the slow way round.
 
+The bounty only runs when the gauntlet's vehicle draw matches the track's own
+default — always, on single-vehicle tracks. The coins are placed along the
+route that vehicle takes, so flying the same course can leave some of them
+somewhere a plane never passes, and an objective that cannot be completed is
+worse than no objective. The tally appearing at the start of a race is the
+tell that this round has a bounty.
+
 These share one switch because the save has room for four record categories,
 not eight — see below.
 
