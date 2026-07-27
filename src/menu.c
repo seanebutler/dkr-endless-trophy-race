@@ -7148,19 +7148,22 @@ s32 menu_character_select_loop(s32 updateRate) {
             charselect_assign_players(gActivePlayersArray);
 
             gIsInTracksMode = TRUE;
-            if (confirmOffset >= gNumberOfActivePlayers) {
+            // ENDLESS: this hack exists to play the endless mode, so choosing a
+            // character drops straight into it instead of walking the player
+            // through a game-mode menu and a track grid to reach the one column
+            // that starts a run. B on the first round's intro backs out to the
+            // normal menus, so Adventure and ordinary Tracks racing are still
+            // reachable -- just no longer on the way in.
+            //
+            // The caution screen still comes first when it is due, and hands
+            // over to the same place afterwards.
+            if (confirmOffset >= gNumberOfActivePlayers && gNumberOfActivePlayers == 1 &&
+                !gPlayerHasSeenCautionMenu) {
                 music_change_off();
                 load_level_for_menu(ASSET_LEVEL_OPTIONSBACKGROUND, -1, 0);
-                if (gNumberOfActivePlayers == 1 && !gPlayerHasSeenCautionMenu) {
-                    menu_init(MENU_CAUTION);
-                } else {
-                    menu_init(MENU_GAME_SELECT);
-                }
+                menu_init(MENU_CAUTION);
             } else {
-                music_change_on();
-                trackmenu_set_records();
-                init_racer_headers();
-                menu_init(MENU_TRACK_SELECT);
+                endless_open_run();
             }
         }
     } else if (gMenuDelay < 0) {
@@ -7307,7 +7310,9 @@ s32 menu_caution_loop(s32 updateRate) {
     }
     if (gMenuDelay > 30) {
         caution_free();
-        menu_init(MENU_GAME_SELECT);
+        // ENDLESS: the caution screen hands over to the run, same as choosing a
+        // character does when the screen is not due.
+        endless_open_run();
     }
     if (gIgnorePlayerInputTime > 0) {
         gIgnorePlayerInputTime -= updateRate;
@@ -12004,6 +12009,34 @@ void menu_trophy_race_round_init(void) {
 }
 
 /**
+ * ENDLESS: open a fresh run's first round intro. Used by every path that now
+ * leads straight into the mode -- character select, and the caution screen
+ * behind it -- so they all set the run up identically.
+ */
+void endless_open_run(void) {
+    music_change_on();
+    trackmenu_set_records();
+    init_racer_headers();
+    gTrophyRaceWorldId = 1; // Replaced by the drawn track's own world.
+    gInAdvModeTrophyRace = FALSE;
+    gTrophyRaceRound = 0;
+    endless_start();
+    menu_init(MENU_TROPHY_RACE_ROUND);
+}
+
+/**
+ * ENDLESS: leave the mode for the menus it now skips past. Without this the
+ * game-mode menu, and Adventure behind it, would be unreachable.
+ */
+void endless_leave_run(void) {
+    endless_stop();
+    gTrophyRaceWorldId = 0;
+    music_change_off();
+    load_level_for_menu(ASSET_LEVEL_OPTIONSBACKGROUND, -1, 0);
+    menu_init(MENU_GAME_SELECT);
+}
+
+/**
  * ENDLESS: re-derive the first round's track after the seed changed. Updates
  * everything cheap -- the track, its world, the default vehicle -- and leaves
  * the backdrop reload to the caller, which defers it while digits are still
@@ -12167,6 +12200,14 @@ s32 menu_trophy_race_round_loop(s32 updateRate) {
         // seeded events, and the stick dials in a seed one digit at a time.
         // Once the run leaves this intro all three settings are locked in.
         if (endless_is_active() && endless_round() == 0) {
+            // B on the setup screen leaves for the game-mode menu. The mode is
+            // now entered straight from character select, so this is the only
+            // way back out to Adventure and ordinary Tracks racing.
+            if ((gMenuButtons[PLAYER_MENU] & B_BUTTON) != 0) {
+                trophyround_free();
+                endless_leave_run();
+                return MENU_RESULT_CONTINUE;
+            }
             if ((gMenuButtons[PLAYER_MENU] & Z_TRIG) != 0) {
                 endless_toggle_time_attack();
                 sound_play(SOUND_MENU_PICK2, NULL);

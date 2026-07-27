@@ -651,6 +651,8 @@ s32 menu_boot_loop(s32 updateRate);
 void menu_magic_codes_init(void);
 s32 menu_game_select_loop(s32 updateRate);
 s32 menu_ghost_data_loop(s32 updateRate);
+void endless_open_run(void);
+void endless_leave_run(void);
 void trophyround_reseed_track(void);
 s32 menu_trophy_race_round_loop(s32 updateRate);
 void pakmenu_render(UNUSED s32 updateRate);
