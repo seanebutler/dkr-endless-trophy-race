@@ -61,6 +61,8 @@
 // deliberately selected from a stateless seed/round hash instead of the track
 // RNG, so enabling events cannot change a seed's track or mirror sequence.
 #define ENDLESS_EVENT_INTERVAL 4
+// Car, hovercraft and plane -- the three a player can normally pick between.
+#define ENDLESS_VEHICLE_CHOICES 3
 
 typedef enum EndlessEvent {
     ENDLESS_EVENT_NONE,
@@ -194,6 +196,74 @@ static EndlessEvent endless_event(void) {
         return ENDLESS_EVENT_NONE;
     }
     return (EndlessEvent) (ENDLESS_EVENT_NO_WEAPONS + (endless_event_hash() % (ENDLESS_EVENT_COUNT - 1)));
+}
+
+/**
+ * The vehicle stream, kept separate from both the track RNG and the event hash
+ * so that a track's assigned vehicle is stable no matter what else changes.
+ */
+static u32 endless_vehicle_hash(void) {
+    u32 value = (u32) gEndlessSeed ^ (((u32) gEndlessRound + 1U) * 0x85EBCA6BU) ^ 0x2545F491U;
+
+    value ^= value >> 15;
+    value *= 0x2C1B3C6DU;
+    value ^= value >> 12;
+    value *= 0x297A2D39U;
+    value ^= value >> 15;
+    return value;
+}
+
+/**
+ * Which vehicle this round is raced in. With the gauntlet off this is simply
+ * the track's own default, so classic runs are untouched.
+ *
+ * The candidates come from the game's per-track vehicle mask -- the same data
+ * the track select menu greys its icons with -- rather than a hand-written
+ * compatibility table. That is what makes an illegal pairing impossible: a
+ * track that cannot be flown never offers the plane in the first place.
+ */
+s32 endless_vehicle(void) {
+    s32 usable;
+    s32 choices[ENDLESS_VEHICLE_CHOICES];
+    s32 count = 0;
+    s32 i;
+
+    if (gEndlessTrackId < 0) {
+        return VEHICLE_CAR;
+    }
+    if (!gEndlessEventsEnabled) {
+        return leveltable_vehicle_default(gEndlessTrackId);
+    }
+    usable = leveltable_vehicle_usable(gEndlessTrackId);
+    // Only the three the player can normally choose between; the mask has room
+    // for special vehicles that no ordinary race should hand out.
+    for (i = VEHICLE_CAR; i <= VEHICLE_PLANE; i++) {
+        if (usable & (1 << i)) {
+            choices[count++] = i;
+        }
+    }
+    if (count == 0) {
+        return leveltable_vehicle_default(gEndlessTrackId);
+    }
+    return choices[endless_vehicle_hash() % (u32) count];
+}
+
+/**
+ * Names the vehicle on the round intro. Only worth saying when the gauntlet
+ * picked it; otherwise it is just the track's usual vehicle.
+ */
+char *endless_vehicle_text(void) {
+    if (!gEndlessEventsEnabled) {
+        return "";
+    }
+    switch (endless_vehicle()) {
+        case VEHICLE_HOVERCRAFT:
+            return "HOVERCRAFT";
+        case VEHICLE_PLANE:
+            return "PLANE";
+        default:
+            return "CAR";
+    }
 }
 
 /**
@@ -732,11 +802,13 @@ char *endless_mode_text(void) {
     s32 i;
 
     if (gEndlessTimeAttack) {
-        end = endless_append_string(sEndlessModeText, "TIME ATTACK  EVENTS ");
+        end = endless_append_string(sEndlessModeText, "TIME ATTACK  ");
     } else {
-        end = endless_append_string(sEndlessModeText, "SURVIVAL  EVENTS ");
+        end = endless_append_string(sEndlessModeText, "SURVIVAL  ");
     }
-    end = endless_append_string(end, gEndlessEventsEnabled ? "ON  SEED " : "OFF  SEED ");
+    // Naming both states beats "EVENTS ON/OFF": the switch now decides vehicles
+    // as well as event rounds, and it is shorter than spelling either out.
+    end = endless_append_string(end, gEndlessEventsEnabled ? "GAUNTLET  SEED " : "CLASSIC  SEED ");
     // Leading zeroes are kept so the digits never shift under the cursor.
     for (i = 0; i < ENDLESS_SEED_DIGITS; i++) {
         digit = (gEndlessSeed / endless_digit_place(i)) % 10;
@@ -1049,6 +1121,12 @@ char *endless_intro_status_text(void) {
     char *end = endless_append_string(sEndlessGoalText, "ROUND ");
 
     end = endless_append_number(end, gEndlessRound + 1);
+    // The gauntlet's vehicle belongs next to the round it applies to. With the
+    // gauntlet off it is the track's usual vehicle and not worth a word.
+    if (gEndlessEventsEnabled) {
+        end = endless_append_string(end, "   ");
+        end = endless_append_string(end, endless_vehicle_text());
+    }
     end = endless_append_string(end, "    ");
     if (gEndlessTimeAttack) {
         endless_append_string(end, endless_clock_text());

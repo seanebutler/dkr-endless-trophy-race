@@ -11948,6 +11948,7 @@ void trophyround_adventure(void) {
 void menu_trophy_race_round_init(void) {
     s32 i;
     s32 index;
+    s32 vehicle;
     Settings *settings;
     s8 *levelIds;
 
@@ -11976,11 +11977,18 @@ void menu_trophy_race_round_init(void) {
         } while (index == -1);
     }
 
+    // ENDLESS: the gauntlet assigns the vehicle from the track's own legal set,
+    // so a track that cannot be flown is never handed the plane.
+    if (endless_is_active()) {
+        vehicle = endless_vehicle();
+    } else {
+        vehicle = leveltable_vehicle_default(index);
+    }
     for (i = 0; i < gNumberOfActivePlayers; i++) {
-        gPlayerSelectVehicle[i] = leveltable_vehicle_default(index);
+        gPlayerSelectVehicle[i] = vehicle;
     }
 
-    set_level_default_vehicle(leveltable_vehicle_default(index));
+    set_level_default_vehicle(vehicle);
     load_level_for_menu(index, -1, 1);
 
     gMenuDelay = 0;
@@ -12003,13 +12011,21 @@ void menu_trophy_race_round_init(void) {
  */
 void trophyround_reseed_track(void) {
     s32 index = endless_pick_track();
+    s32 vehicle;
     s32 i;
 
     gTrophyRaceWorldId = endless_current_world();
-    for (i = 0; i < gNumberOfActivePlayers; i++) {
-        gPlayerSelectVehicle[i] = leveltable_vehicle_default(index);
+    // ENDLESS: the gauntlet assigns the vehicle from the track's own legal set,
+    // so a track that cannot be flown is never handed the plane.
+    if (endless_is_active()) {
+        vehicle = endless_vehicle();
+    } else {
+        vehicle = leveltable_vehicle_default(index);
     }
-    set_level_default_vehicle(leveltable_vehicle_default(index));
+    for (i = 0; i < gNumberOfActivePlayers; i++) {
+        gPlayerSelectVehicle[i] = vehicle;
+    }
+    set_level_default_vehicle(vehicle);
     gTrackNameVoiceDelay = 10;
 }
 
@@ -12089,7 +12105,7 @@ void trophyround_render(UNUSED s32 updateRate) {
             // The controls sit apart from the run details, below the line they
             // act on, so they read as a footnote rather than another fact.
             set_text_colour(176, 176, 176, 96, 255);
-            draw_text(&sMenuCurrDisplayList, SCREEN_WIDTH_HALF, yPos + 176, "Z:MODE  C-DOWN:EVENTS  STICK:SEED",
+            draw_text(&sMenuCurrDisplayList, SCREEN_WIDTH_HALF, yPos + 176, "Z:MODE  C-DOWN:GAUNTLET  STICK:SEED",
                       ALIGN_MIDDLE_CENTER);
             set_text_colour(255, 255, 255, 0, 255);
         } else {

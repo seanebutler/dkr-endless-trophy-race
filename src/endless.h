@@ -45,6 +45,8 @@ s32 endless_events_enabled(void);
 void endless_toggle_events(void);
 s32 endless_event_active(void);
 s32 endless_event_cheats(void);
+s32 endless_vehicle(void);
+char *endless_vehicle_text(void);
 s32 endless_clock(void);
 s32 endless_run_continues(void);
 void endless_round_finished(s32 roundPoints);

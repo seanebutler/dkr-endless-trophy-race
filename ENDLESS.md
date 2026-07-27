@@ -35,11 +35,23 @@ win, three for second, two for third. Bananas raise top speed and are lost on
 every hit, so it is a burst of speed the escalating AI immediately starts
 taking back rather than an edge that snowballs.
 
-With **Events On**, every fourth race adds a seed-selected rule from a safe
-five-event deck: no weapons, no zippers, boost balloons only, shield balloons
-only, or maximum-power pickups. Event selection uses its own stateless hash,
-so it never consumes the track-order RNG. Turning Events Off therefore keeps
-the exact track and mirror sequence that the same seed produced in v0.2.2.
+**Gauntlet** adds two seeded rule layers on top of the base run. Every round is
+assigned a vehicle, and every fourth race adds a rule from a five-card deck: no
+weapons, no zippers, boost balloons only, shield balloons only, or
+maximum-power pickups.
+
+The vehicle is drawn from the game's own per-track vehicle mask — the same data
+the track select menu greys its icons with — so an illegal pairing is not
+possible to express: a track that cannot be flown never offers the plane in the
+first place. It also means an ordinary track can become a genuinely different
+race, since a hovercraft round on a car circuit takes different lines.
+
+Both layers use their own stateless hashes rather than the track-order RNG, so
+neither consumes it. **Classic** turns both off and keeps the exact track and
+mirror sequence that the same seed produced in v0.2.
+
+The two share one switch because the save has room for four record categories,
+not eight — see below.
 
 Your round and what you need are on the HUD the whole race, turning red the
 moment you drop out of it.
@@ -47,8 +59,8 @@ moment you drop out of it.
 ### Two ways to lose
 
 Press **Z** on the first round's intro to switch modes. Press **C-Down** there
-to toggle seeded event rounds. Both choices lock once the race starts, so the
-rules cannot change halfway through a run.
+to switch between **Gauntlet** and **Classic**. Both choices lock once the race
+starts, so the rules cannot change halfway through a run.
 
 - **Survival** — meet the round's required finish position or the run ends.
   It tightens as you go: top 4 (rounds 1-3) → top 3 (4-6) → top 2 (7-9) →
