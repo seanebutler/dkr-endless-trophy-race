@@ -86,15 +86,27 @@ moment you drop out of it, with a digital speed readout above them. Both sit
 centred along the bottom, in the gap between the weapon icon and the minimap.
 Speed is solo only — the split-screen viewports have no room to spare.
 
-### Two ways to lose
+### Three modes
 
-Press **Z** on the first round's intro to switch modes. Press **C-Down** there
+Press **Z** on the first round's intro to cycle modes. Press **C-Down** there
 to switch between **Gauntlet** and **Classic**. Both choices lock once the race
 starts, so the rules cannot change halfway through a run.
 
 - **Survival** — meet the round's required finish position or the run ends.
   It tightens as you go: top 4 (rounds 1-3) → top 3 (4-6) → top 2 (7-9) →
   **1st only** (10+).
+- **Season** — a finite, comparable score attack. Exactly twenty races, one
+  full shuffle bag, every track once. Nothing can eliminate you: a disastrous
+  race costs points and nothing else, so two players who race the same seed
+  both finish twenty races and can compare a single number. The run ends after
+  race twenty and the receipt reads **SEASON COMPLETE** rather than GAME OVER.
+  Maximum score is 180 — twenty wins at nine points each.
+
+  A season escalates on its own schedule. The endless ramp is built for a run
+  with no end and spends little of its range inside twenty races: the AI
+  behaviour table saturates at race 8, and the speed bonus needs race 40 to
+  reach its cap. A season instead scales that bonus so the final race lands
+  exactly on the cap, which turns a flat back two-thirds into a real arc.
 - **Time Attack** — placement never ends the run. Instead every race is settled
   against a three-minute run clock, refunded as a share of that race's own
   duration: winning buys 30% back, fourth costs 10%, trailing costs 25%. The
@@ -118,9 +130,18 @@ saved records meaningless.
 ### Records and seeds
 
 Points accumulate all run using the trophy scoring table (9/7/5/3/1). For solo
-runs, the game saves a best depth **and score** for each of the four rules
-categories: Survival or Time Attack, each in Gauntlet or Classic. Deeper always
-wins; score breaks ties between equally deep runs. Records live in a
+runs, the game saves a best depth **and score** for each of the six rules
+categories: Survival, Time Attack or Season, each in Gauntlet or Classic.
+Deeper always wins; score breaks ties between equally deep runs.
+
+That comparator needs no special case for a season: every completed season ties
+at the same depth of twenty, so the score alone decides, which is exactly the
+score-attack semantics. An abandoned season records the races it did clear and
+loses to any completed one.
+
+One honest limit of the scoring table in a mode with no elimination: positions
+6th through 8th all award zero, so the very bottom of a season's range is flat.
+It separates competitive runs cleanly and stops distinguishing bad ones. Records live in a
 checksummed block in the retired adventure save region (caps 255 rounds and
 65535 points) and are cleared by erasing Game Pak Times. Records from older
 versions are migrated in automatically the first time this build runs.
@@ -232,6 +253,22 @@ These cost real time to find, so they are written down rather than rediscovered:
   are migrated in once and the word's 30 bits freed.
 - The vanilla rankings screen sets an option count of three while only filling
   two entries, so a stale pointer gets drawn as a third option.
+- **FUNFONT has no slash glyph.** A missing glyph is skipped without advancing
+  the pen, so `"7/20"` renders as `720` — silently, with no gap to hint at it.
+  Every progress string in this mode spells out `" OF "` for that reason.
+- `endless_ai_level` pins the behaviour table to its maximum from round 8, and
+  that table's action chances are already 100, so `ENDLESS_CHANCE_PER_HEAT` is
+  clamped away at every round of every run and has never changed a value. The
+  speed bonus is the only escalation that actually does anything past round 8.
+
+## Fixed
+
+- Time Attack settled its clock **twice per race** from the silver coin bounty
+  onwards: the bounty commit added a settle above the existing one without
+  removing it, so every refund and penalty landed at double rate (a win bought
+  back 60% of the race duration instead of 30%, a trailing finish cost 50%
+  instead of 25%). Fixed in v0.6.0. Time Attack records set before that were
+  earned under the doubled rates and are not comparable with new ones.
 
 ## Not done yet
 

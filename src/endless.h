@@ -16,6 +16,20 @@
  * Tracks menu trophy race column, which this hack repurposes.
  */
 
+/**
+ * What ends a run. Survival ends on a missed placement, Time Attack when the
+ * run clock empties, and Season never -- it stops after the last race of the
+ * shuffle bag, which is what makes its score comparable between players.
+ *
+ * The order is load-bearing: records are indexed mode * 2 + gauntlet, so
+ * changing it would move every saved record to another category.
+ */
+typedef enum EndlessMode {
+    ENDLESS_MODE_SURVIVAL,
+    ENDLESS_MODE_TIME_ATTACK,
+    ENDLESS_MODE_SEASON
+} EndlessMode;
+
 void endless_start(void);
 void endless_retry_seed(void);
 void endless_new_seed(void);
@@ -41,7 +55,8 @@ void endless_seed_clear_dirty(void);
 s32 endless_seed_refresh_pending(void);
 s32 endless_seed_refresh_due(s32 updateRate);
 s32 endless_time_attack(void);
-void endless_toggle_time_attack(void);
+s32 endless_season(void);
+void endless_cycle_mode(void);
 s32 endless_events_enabled(void);
 void endless_toggle_events(void);
 s32 endless_event_active(void);
@@ -53,6 +68,7 @@ s32 endless_vehicle(void);
 char *endless_vehicle_text(void);
 s32 endless_clock(void);
 s32 endless_run_continues(void);
+s32 endless_run_failed(void);
 void endless_round_finished(s32 roundPoints);
 s32 endless_ai_level(s32 baseLevel);
 void endless_scale_ai_table(AIBehaviourTable *table);
@@ -71,6 +87,7 @@ char *endless_hud_text(void);
 char *endless_best_text(void);
 char *endless_perk_text(void);
 char *endless_clock_text(void);
+char *endless_season_text(void);
 char *endless_speed_text(s32 speed);
 char *endless_mode_text(void);
 char *endless_event_text(void);

@@ -49,6 +49,18 @@
 #define ENDLESS_TA_PCT_FOURTH (-10)
 #define ENDLESS_TA_PCT_REST (-25)
 
+// Twenty-Race Season. A finite score attack over exactly one full shuffle bag:
+// every track is raced once, nothing eliminates the player, and the total score
+// is the record. The season's length is the bag's size rather than a literal 20,
+// so it stays correct if the pool is ever filtered differently.
+#define ENDLESS_SEASON_WIN_POINTS 9 // gTrophyRacePointsArray's first-place award.
+// The endless ramp is built for an unbounded run and spends almost none of its
+// range inside twenty races: the behaviour table saturates at race 8, and the
+// speed bonus needs race 40 to reach its cap, so a season's back two thirds
+// would be flat. A season runs the same escalation on its own schedule, sized
+// so the final race lands on the cap instead of 37% of the way to it.
+#define ENDLESS_SEASON_SPEED_PER_HEAT 0.3333f
+
 // Seeds are four digits so they can be read out loud and typed back in.
 #define ENDLESS_SEED_MAX 9999
 #define ENDLESS_SEED_DIGITS 4
@@ -126,7 +138,7 @@ s32 gEndlessTrackId = -1;
 s32 gEndlessTrackWorld = 1;
 s32 gEndlessMirrorThisRace = FALSE;
 s32 gEndlessPerkBananas = 0;
-s32 gEndlessTimeAttack = FALSE; // Kept between runs: it is a preference.
+s32 gEndlessMode = ENDLESS_MODE_SURVIVAL; // Kept between runs: it is a preference.
 s32 gEndlessEventsEnabled = TRUE; // Also a preference; OFF is classic v0.2 play.
 s32 gEndlessClock = 0;
 s32 gEndlessSeed = 0;
@@ -141,11 +153,12 @@ static s32 sEndlessPoolSize;
 static s32 sEndlessPoolCursor;
 static char sEndlessRoundText[16];
 static char sEndlessScoreText[24];
-static char sEndlessGoalText[40];
-static char sEndlessHudText[48];
+static char sEndlessGoalText[56];
+static char sEndlessHudText[56];
 static char sEndlessBestText[32];
 static char sEndlessPerkText[32];
 static char sEndlessClockText[24];
+static char sEndlessSeasonText[24];
 static char sEndlessSpeedText[16];
 static char sEndlessModeText[40];
 static char sEndlessResultText[40];
@@ -371,6 +384,37 @@ static void endless_shuffle_pool(void) {
         sEndlessPoolWorld[j] = temp;
     }
     sEndlessPoolCursor = 0;
+}
+
+/**
+ * How many races a season is: the size of the shuffle bag, so a season is
+ * exactly "every track once" by construction rather than by a matching literal.
+ */
+static s32 endless_season_length(void) {
+    if (sEndlessPoolSize <= 0) {
+        endless_build_pool();
+    }
+    return sEndlessPoolSize;
+}
+
+/**
+ * "RACE 7 OF 20". Spelled out because FUNFONT has no slash glyph: a missing
+ * glyph is skipped without advancing, so "7/20" would silently render "720".
+ */
+static char *endless_append_season_progress(char *dst) {
+    char *end = endless_append_string(dst, "RACE ");
+
+    end = endless_append_number(end, gEndlessRound + 1);
+    end = endless_append_string(end, " OF ");
+    return endless_append_number(end, endless_season_length());
+}
+
+/**
+ * Public "RACE 7 OF 20" for the screens outside this file.
+ */
+char *endless_season_text(void) {
+    endless_append_season_progress(sEndlessSeasonText);
+    return sEndlessSeasonText;
 }
 
 static void endless_begin_with_seed(s32 seed) {
@@ -718,11 +762,24 @@ s32 endless_bounty_claimed(void) {
 }
 
 s32 endless_time_attack(void) {
-    return gEndlessTimeAttack;
+    return gEndlessMode == ENDLESS_MODE_TIME_ATTACK;
 }
 
-void endless_toggle_time_attack(void) {
-    gEndlessTimeAttack = !gEndlessTimeAttack;
+s32 endless_season(void) {
+    return gEndlessMode == ENDLESS_MODE_SEASON;
+}
+
+/**
+ * Survival -> Time Attack -> Season -> Survival. The clock is refilled on every
+ * step rather than only on the way into Time Attack, so a mode cycled past and
+ * come back to is still a full clock. A season needs no reset of its own: its
+ * progress is gEndlessRound and its length is the bag, both rebuilt per run.
+ */
+void endless_cycle_mode(void) {
+    gEndlessMode++;
+    if (gEndlessMode > ENDLESS_MODE_SEASON) {
+        gEndlessMode = ENDLESS_MODE_SURVIVAL;
+    }
     gEndlessClock = normalise_time(ENDLESS_TA_START_SECONDS * ENDLESS_TICKS_PER_SECOND);
 }
 
@@ -845,10 +902,29 @@ static void endless_settle_clock(void) {
  * the clock runs dry, so a bad race costs time rather than the whole run.
  */
 s32 endless_run_continues(void) {
-    if (gEndlessTimeAttack) {
+    // A season ends by running out of races, not by failing one. Answering the
+    // bag question here is what keeps every existing caller correct without
+    // being re-pointed: for a season "the run is over" and "there is no next
+    // round" are the same fact, which is only untrue for modes that end early.
+    if (gEndlessMode == ENDLESS_MODE_SEASON) {
+        return (gEndlessRound + 1) < endless_season_length();
+    }
+    if (gEndlessMode == ENDLESS_MODE_TIME_ATTACK) {
         return gEndlessClock > 0;
     }
     return endless_player_survived();
+}
+
+/**
+ * Whether the run ended badly, as opposed to merely ending. Only two things
+ * need to tell those apart: the depth written to the save, and whether the
+ * receipt reads GAME OVER or SEASON COMPLETE.
+ */
+s32 endless_run_failed(void) {
+    if (gEndlessMode == ENDLESS_MODE_SEASON) {
+        return FALSE;
+    }
+    return !endless_run_continues();
 }
 
 /**
@@ -859,19 +935,19 @@ s32 endless_run_continues(void) {
 void endless_round_finished(s32 roundPoints) {
     s32 survived;
 
-    if (gEndlessTimeAttack) {
-        endless_settle_clock();
-    }
     // The bounty is paid before the clock is judged, so a full coin set can be
     // what keeps a Time Attack run alive rather than a consolation for losing.
-    if (sEndlessBountyClaimed && gEndlessTimeAttack) {
+    if (sEndlessBountyClaimed && gEndlessMode == ENDLESS_MODE_TIME_ATTACK) {
         gEndlessClock += normalise_time(ENDLESS_BOUNTY_TA_SECONDS * ENDLESS_TICKS_PER_SECOND);
     }
-    if (gEndlessTimeAttack) {
+    if (gEndlessMode == ENDLESS_MODE_TIME_ATTACK) {
         endless_settle_clock();
     }
     survived = endless_run_continues();
-    sEndlessResultRounds = survived ? gEndlessRound + 1 : gEndlessRound;
+    // Depth counts races cleared, so it keys off failing rather than off
+    // continuing: a completed season stops without failing and has cleared its
+    // last race, where a lost run has not cleared the one that ended it.
+    sEndlessResultRounds = endless_run_failed() ? gEndlessRound : gEndlessRound + 1;
     sEndlessResultScore = endless_score() + roundPoints;
     sEndlessResultPosition = endless_best_finish() + 1;
     if (endless_record_run(sEndlessResultRounds, sEndlessResultScore)) {
@@ -881,7 +957,7 @@ void endless_round_finished(s32 roundPoints) {
         endless_award_perk();
         // Survival pays the bounty as the largest head start there is, which
         // beats anything placement alone can earn.
-        if (sEndlessBountyClaimed && !gEndlessTimeAttack) {
+        if (sEndlessBountyClaimed && gEndlessMode != ENDLESS_MODE_TIME_ATTACK) {
             gEndlessPerkBananas = ENDLESS_BOUNTY_BANANAS;
         }
     }
@@ -911,7 +987,9 @@ char *endless_mode_text(void) {
     s32 digit;
     s32 i;
 
-    if (gEndlessTimeAttack) {
+    if (gEndlessMode == ENDLESS_MODE_SEASON) {
+        end = endless_append_string(sEndlessModeText, "SEASON  ");
+    } else if (gEndlessMode == ENDLESS_MODE_TIME_ATTACK) {
         end = endless_append_string(sEndlessModeText, "TIME ATTACK  ");
     } else {
         end = endless_append_string(sEndlessModeText, "SURVIVAL  ");
@@ -994,7 +1072,12 @@ s32 endless_mirrored(void) {
  * irrelevant, so it is whether the clock still has comfortable room.
  */
 s32 endless_position_is_safe(s32 racePosition) {
-    if (gEndlessTimeAttack) {
+    // A season has no loss condition, so nothing on its HUD should ever read as
+    // danger; a mid-pack race costs points, which the score line already says.
+    if (gEndlessMode == ENDLESS_MODE_SEASON) {
+        return TRUE;
+    }
+    if (gEndlessMode == ENDLESS_MODE_TIME_ATTACK) {
         return gEndlessClock > normalise_time(60 * ENDLESS_TICKS_PER_SECOND);
     }
     return (racePosition - 1) <= endless_required_position();
@@ -1022,6 +1105,10 @@ s32 endless_ai_level(UNUSED s32 baseLevel) {
  */
 void endless_scale_ai_table(AIBehaviourTable *table) {
     s32 heat = gEndlessRound - ENDLESS_HEAT_START_ROUND;
+    // A season is over before the endless schedule has spent much of its range,
+    // so it escalates faster: its last race lands on the cap rather than at 37%.
+    f32 perHeat =
+        (gEndlessMode == ENDLESS_MODE_SEASON) ? ENDLESS_SEASON_SPEED_PER_HEAT : ENDLESS_SPEED_PER_HEAT;
     f32 bonus;
     s32 value;
     s32 i;
@@ -1029,7 +1116,7 @@ void endless_scale_ai_table(AIBehaviourTable *table) {
     if (heat <= 0) {
         return;
     }
-    bonus = heat * ENDLESS_SPEED_PER_HEAT;
+    bonus = heat * perHeat;
     if (bonus > ENDLESS_SPEED_BONUS_CAP) {
         bonus = ENDLESS_SPEED_BONUS_CAP;
     }
@@ -1077,8 +1164,13 @@ char *endless_score_text(void) {
     return sEndlessScoreText;
 }
 
+/**
+ * mode * 2 + gauntlet. Survival and Time Attack keep indices 0-3 exactly where
+ * they already were, so existing records survive untouched, and Season lands on
+ * the slots 4 and 5 that the block reserved.
+ */
 static s32 endless_record_category(void) {
-    s32 category = gEndlessTimeAttack ? 2 : 0;
+    s32 category = gEndlessMode * 2;
 
     if (gEndlessEventsEnabled) {
         category++;
@@ -1229,6 +1321,15 @@ char *endless_best_text(void) {
         return sEndlessBestText;
     }
     end = endless_append_string(sEndlessBestText, "BEST ");
+    // Every completed season ties at the same depth, so the depth is not news
+    // there and the score is the whole record.
+    if (gEndlessMode == ENDLESS_MODE_SEASON) {
+        end = endless_append_number(end, endless_best_score());
+        end = endless_append_string(end, " OF ");
+        end = endless_append_number(end, endless_season_length() * ENDLESS_SEASON_WIN_POINTS);
+        endless_append_string(end, " PTS");
+        return sEndlessBestText;
+    }
     end = endless_append_number(end, endless_best_rounds());
     end = endless_append_string(end, endless_best_rounds() == 1 ? " ROUND" : " ROUNDS");
     // Migrated v0.3 records carry no score; only show one that exists.
@@ -1241,8 +1342,19 @@ char *endless_best_text(void) {
 }
 
 char *endless_result_text(void) {
-    char *end = endless_append_string(sEndlessResultText, "ROUNDS ");
+    char *end;
 
+    // A season's headline fact is the score against its fixed maximum; the
+    // race count is constant for every completed season and moves to the
+    // detail line, where it reports how much of the season was actually run.
+    if (gEndlessMode == ENDLESS_MODE_SEASON) {
+        end = endless_append_string(sEndlessResultText, "SCORE ");
+        end = endless_append_number(end, sEndlessResultScore);
+        end = endless_append_string(end, " OF ");
+        endless_append_number(end, endless_season_length() * ENDLESS_SEASON_WIN_POINTS);
+        return sEndlessResultText;
+    }
+    end = endless_append_string(sEndlessResultText, "ROUNDS ");
     end = endless_append_number(end, sEndlessResultRounds);
     end = endless_append_string(end, "   SCORE ");
     endless_append_number(end, sEndlessResultScore);
@@ -1262,7 +1374,13 @@ char *endless_result_detail_text(void) {
     } else {
         end = endless_append_string(end, "TH");
     }
-    if (gEndlessTimeAttack) {
+    if (gEndlessMode == ENDLESS_MODE_SEASON) {
+        end = endless_append_string(end, "   ");
+        end = endless_append_number(end, sEndlessResultRounds);
+        end = endless_append_string(end, " OF ");
+        end = endless_append_number(end, endless_season_length());
+        endless_append_string(end, " RACES");
+    } else if (gEndlessMode == ENDLESS_MODE_TIME_ATTACK) {
         end = endless_append_string(end, "   ");
         endless_append_string(end, endless_clock_text());
     }
@@ -1276,9 +1394,16 @@ char *endless_result_detail_text(void) {
  * afford to spell the requirement out.
  */
 char *endless_intro_status_text(void) {
-    char *end = endless_append_string(sEndlessGoalText, "ROUND ");
+    char *end;
 
-    end = endless_append_number(end, gEndlessRound + 1);
+    // A season counts down to a known end, so it says where it is in the season
+    // rather than which round this is.
+    if (gEndlessMode == ENDLESS_MODE_SEASON) {
+        end = endless_append_season_progress(sEndlessGoalText);
+    } else {
+        end = endless_append_string(sEndlessGoalText, "ROUND ");
+        end = endless_append_number(end, gEndlessRound + 1);
+    }
     // The gauntlet's vehicle belongs next to the round it applies to. With the
     // gauntlet off it is the track's usual vehicle and not worth a word.
     if (gEndlessEventsEnabled) {
@@ -1286,7 +1411,12 @@ char *endless_intro_status_text(void) {
         end = endless_append_string(end, endless_vehicle_text());
     }
     end = endless_append_string(end, "    ");
-    if (gEndlessTimeAttack) {
+    // A season has no requirement to state, so the slot that names the goal
+    // carries the running total instead -- the only number that decides it.
+    if (gEndlessMode == ENDLESS_MODE_SEASON) {
+        end = endless_append_string(end, "SCORE ");
+        endless_append_number(end, endless_score());
+    } else if (gEndlessMode == ENDLESS_MODE_TIME_ATTACK) {
         endless_append_string(end, endless_clock_text());
     } else if (endless_required_position() == 0) {
         endless_append_string(end, "FINISH 1ST");
@@ -1311,7 +1441,11 @@ char *endless_hud_text(void) {
         end = endless_append_string(sEndlessHudText, "R");
         end = endless_append_number(end, gEndlessRound + 1);
         end = endless_append_string(end, " TEAM ");
-        if (gEndlessTimeAttack) {
+        // This branch exists because a quarter-screen viewport has no room, so
+        // the season drops "OF 20" here and keeps only the number that changes.
+        if (gEndlessMode == ENDLESS_MODE_SEASON) {
+            endless_append_number(end, endless_score());
+        } else if (gEndlessMode == ENDLESS_MODE_TIME_ATTACK) {
             endless_append_string(end, endless_clock_text() + 5); // Skip "TIME ".
         } else if (endless_required_position() == 0) {
             endless_append_string(end, "1ST");
@@ -1322,13 +1456,19 @@ char *endless_hud_text(void) {
         return sEndlessHudText;
     }
 
-    end = endless_append_string(sEndlessHudText, "ROUND ");
-
-    end = endless_append_number(end, gEndlessRound + 1);
+    if (gEndlessMode == ENDLESS_MODE_SEASON) {
+        end = endless_append_season_progress(sEndlessHudText);
+    } else {
+        end = endless_append_string(sEndlessHudText, "ROUND ");
+        end = endless_append_number(end, gEndlessRound + 1);
+    }
     if (players > 1) {
         end = endless_append_string(end, "  TEAM");
     }
-    if (gEndlessTimeAttack) {
+    if (gEndlessMode == ENDLESS_MODE_SEASON) {
+        end = endless_append_string(end, "  SCORE ");
+        endless_append_number(end, endless_score());
+    } else if (gEndlessMode == ENDLESS_MODE_TIME_ATTACK) {
         end = endless_append_string(end, "  ");
         endless_append_string(end, endless_clock_text());
     } else if (endless_required_position() == 0) {

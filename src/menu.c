@@ -12213,7 +12213,7 @@ s32 menu_trophy_race_round_loop(s32 updateRate) {
                 return MENU_RESULT_CONTINUE;
             }
             if ((gMenuButtons[PLAYER_MENU] & Z_TRIG) != 0) {
-                endless_toggle_time_attack();
+                endless_cycle_mode();
                 sound_play(SOUND_MENU_PICK2, NULL);
             }
             if ((gMenuButtons[PLAYER_MENU] & D_CBUTTONS) != 0) {
@@ -12508,7 +12508,13 @@ static void endless_rankings_render_receipt(s32 highlight) {
 
     set_text_background_colour(0, 0, 0, 0);
     set_text_font(ASSET_FONTS_BIGFONT);
-    endless_receipt_draw_line(32, "GAME OVER", 255, 64, 64);
+    // A completed season reaches this receipt without having failed anything,
+    // so the headline reports the ending rather than announcing a loss.
+    if (endless_run_failed()) {
+        endless_receipt_draw_line(32, "GAME OVER", 255, 64, 64);
+    } else {
+        endless_receipt_draw_line(32, "SEASON COMPLETE", 96, 255, 128);
+    }
     set_text_font(ASSET_FONTS_FUNFONT);
     endless_receipt_draw_line(64, endless_mode_text(), 255, 255, 255);
     endless_receipt_draw_line(88, endless_result_text(), 255, 255, 255);
@@ -12589,8 +12595,11 @@ void rankings_render_order(s32 updateRate) {
         draw_text(&sMenuCurrDisplayList, SCREEN_WIDTH_HALF, 32, endless_score_text(), ALIGN_MIDDLE_CENTER);
         // In Time Attack the clock has just been settled against this race, so
         // this is where the player finds out what the result cost or bought.
+        // A season has no clock; the same slot tracks how much of it is left.
         if (endless_time_attack()) {
             draw_text(&sMenuCurrDisplayList, SCREEN_WIDTH_HALF, 48, endless_clock_text(), ALIGN_MIDDLE_CENTER);
+        } else if (endless_season()) {
+            draw_text(&sMenuCurrDisplayList, SCREEN_WIDTH_HALF, 48, endless_season_text(), ALIGN_MIDDLE_CENTER);
         }
     }
 }
