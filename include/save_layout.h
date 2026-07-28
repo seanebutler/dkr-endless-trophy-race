@@ -222,9 +222,33 @@ typedef struct SaveBuffer {
     CourseRecords courseTimes;
 } SaveBuffer ALIGNED8;
 
+// ENDLESS: adventure mode is retired in this hack, and its three save files
+// with it. The EEPROM is otherwise measured full (512 of 512 bytes), so the
+// first retired slot's five blocks are reclaimed for the endless records.
+// The adventure save IO in save_data.c is gated off so nothing else can
+// touch the region -- its checksum self-heal would otherwise "repair" this
+// block back into a blank adventure save.
+//
+// Categories are indexed timeAttack * 2 + gauntlet; slots 4-7 are reserved
+// for a future rules dimension. Scores returned home in this layout: the
+// settings word only had room for depths, which is why v0.3 kept the score
+// on the game-over receipt alone.
+typedef struct EndlessRecords {
+    u16 checksum; // Byte sum of everything after it; erased 0xFF fails it.
+    u8 version;   // ENDLESS_RECORDS_VERSION when valid.
+    u8 pad;
+    u8 rounds[8];  // Best cleared depth per rules category, capped 255.
+    u16 scores[8]; // Best score within that depth, capped 65535.
+    u8 spare[12];  // Still-unused space from the reclaimed slot.
+} EndlessRecords; // 40 bytes: exactly the retired save slot A.
+
+#define ENDLESS_RECORDS_VERSION 1
+#define ENDLESS_RECORDS_CATEGORIES 8
+
 // Eeprom works in 8 byte blocks, so divide by 8 for those functions.
 #define BLOCK_SIZE(x)           (x / sizeof(u64))
 #define SAVE_START              (0)
+#define ENDLESS_RECORDS_START   (SAVE_START)
 #define CONFIG_START            (SAVE_START + (sizeof(SaveFile) * NUMBER_OF_SAVE_FILES))
 #define FASTEST_LAPS_START      (CONFIG_START + sizeof(SaveConfig))
 #define COURSE_TIMES_START      (FASTEST_LAPS_START + sizeof(CourseRecords))

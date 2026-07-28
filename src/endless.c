@@ -6,6 +6,7 @@
 #include "math_util.h"
 #include "menu.h"
 #include "objects.h"
+#include "save_layout.h"
 #include "structs.h"
 #include "thread3_main.h"
 #include "types.h"
@@ -94,17 +95,11 @@ typedef enum EndlessEvent {
     ENDLESS_EVENT_COUNT
 } EndlessEvent;
 
-// Where categorized records live in the EEPROM settings word. Bits 0-25 are
-// vanilla flags and bits 56-63 are the settings checksum, leaving 30 bits. Four
-// full round+score records cannot fit there, so each rules category keeps an
-// honest 7-bit best depth and the full score remains on the run receipt.
-//
-// Categories are Survival/Events Off, Survival/Events On, Time Attack/Events
-// Off, and Time Attack/Events On. The first two free bits mark this layout;
-// v0.2 never wrote them, so no legacy score can be mistaken for the marker.
-// The old v0.2 record is migrated into the only category that existed
-// unambiguously: Events Off; its mode was not stored, so it is assigned to
-// Survival.
+// Migration-era layouts in the EEPROM settings word. Records now live in the
+// EndlessRecords block (save_layout.h) inside the retired adventure save slot;
+// these constants only describe where older builds kept them, so their data
+// can be absorbed once and the word's 30 bits freed. v0.3/v0.4: a two-bit
+// marker plus four 7-bit depths. v0.2: one shared depth and score.
 #define ENDLESS_SAVE_LAYOUT_MARKER_SHIFT 26
 #define ENDLESS_SAVE_LAYOUT_MARKER_MASK ((u64) 0x3)
 #define ENDLESS_SAVE_LAYOUT_MARKER_VALUE ((u64) 0x3)
@@ -114,6 +109,8 @@ typedef enum EndlessEvent {
 #define ENDLESS_SAVE_LAYOUT_MASK (((u64) 0x3FFFFFFF) << ENDLESS_SAVE_LAYOUT_MARKER_SHIFT)
 #define ENDLESS_LEGACY_ROUNDS_SHIFT 32
 #define ENDLESS_LEGACY_ROUNDS_MASK ((u64) 0x3FF)
+#define ENDLESS_LEGACY_SCORE_SHIFT 42
+#define ENDLESS_LEGACY_SCORE_MASK ((u64) 0x3FFF)
 
 // Layout of ASSET_MISC_TRACKS_MENU_IDS: one row of 6 entries per world, the
 // first 4 being races and the last 2 the trophy race and battle arena.
@@ -164,10 +161,11 @@ static s32 sEndlessResultPosition;
 static s32 sEndlessNewBest;
 static s32 sEndlessBountyClaimed;
 static u32 sEndlessRngState;
+static EndlessRecords sEndlessRecords;
 
 /******************************/
 
-static void endless_ensure_record_layout(void);
+static void endless_ensure_records(void);
 
 /**
  * The run's own random stream. The game's shared rand_range is advanced by
@@ -379,7 +377,7 @@ static void endless_begin_with_seed(s32 seed) {
     Settings *settings;
     s32 i;
 
-    endless_ensure_record_layout();
+    endless_ensure_records();
     // Results overwrite starting_position and per-race timing fields. Starting
     // a new attempt must restore the same clean grid as entering Tracks mode,
     // while init_racer_headers preserves the selected character slots.
@@ -876,7 +874,7 @@ void endless_round_finished(s32 roundPoints) {
     sEndlessResultRounds = survived ? gEndlessRound + 1 : gEndlessRound;
     sEndlessResultScore = endless_score() + roundPoints;
     sEndlessResultPosition = endless_best_finish() + 1;
-    if (endless_record_run(sEndlessResultRounds)) {
+    if (endless_record_run(sEndlessResultRounds, sEndlessResultScore)) {
         sEndlessNewBest = TRUE;
     }
     if (survived) {
@@ -1088,93 +1086,127 @@ static s32 endless_record_category(void) {
     return category;
 }
 
-static s32 endless_record_shift(void) {
-    return ENDLESS_SAVE_RECORD_BASE_SHIFT + (endless_record_category() * ENDLESS_SAVE_RECORD_BITS);
-}
-
 /**
- * EEPROM has no room to split all four rules categories again by player count.
- * Keep the persistent board honest and comparable by ranking solo attempts;
- * co-op still gets the complete end-of-run receipt.
+ * The persistent board ranks solo attempts; a team result is not comparable
+ * with one. Co-op still gets the complete end-of-run receipt.
  */
 static s32 endless_records_enabled(void) {
     return get_number_of_active_players() == 1;
 }
 
-/**
- * Convert the v0.2 shared round+score record into the categorized v0.3 layout.
- * Events did not exist in v0.2, so OFF is certain; the old mode was never
- * stored, so Survival is the least surprising home for the legacy depth.
- */
-static void endless_ensure_record_layout(void) {
-    u64 value = get_eeprom_settings();
-    s32 marker = (s32) ((value >> ENDLESS_SAVE_LAYOUT_MARKER_SHIFT) & ENDLESS_SAVE_LAYOUT_MARKER_MASK);
-    s32 legacyRounds;
+EndlessRecords *endless_records_pointer(void) {
+    return &sEndlessRecords;
+}
 
-    if (marker == (s32) ENDLESS_SAVE_LAYOUT_MARKER_VALUE) {
-        return;
+/**
+ * Bring the records block up to date with anything older builds left in the
+ * settings word: v0.3/v0.4 kept four 7-bit depths behind a marker there, and
+ * v0.2 a single depth+score pair. Whatever is found is absorbed (taking the
+ * larger where both exist) and the word's bits are freed for good -- the block
+ * in the retired save slot has room the word never had.
+ *
+ * The block itself was read by the boot-time settings read; an invalid or
+ * never-written block arrives here zeroed with version 0.
+ */
+static void endless_ensure_records(void) {
+    u64 word = get_eeprom_settings();
+    s32 marker = (s32) ((word >> ENDLESS_SAVE_LAYOUT_MARKER_SHIFT) & ENDLESS_SAVE_LAYOUT_MARKER_MASK);
+    s32 changed = FALSE;
+    s32 depth;
+    s32 score;
+    s32 i;
+
+    if (sEndlessRecords.version != ENDLESS_RECORDS_VERSION) {
+        sEndlessRecords.version = ENDLESS_RECORDS_VERSION;
+        changed = TRUE;
     }
-    legacyRounds = (s32) ((value >> ENDLESS_LEGACY_ROUNDS_SHIFT) & ENDLESS_LEGACY_ROUNDS_MASK);
-    if (legacyRounds > (s32) ENDLESS_SAVE_RECORD_MASK) {
-        legacyRounds = (s32) ENDLESS_SAVE_RECORD_MASK;
+    if ((word & ENDLESS_SAVE_LAYOUT_MASK) != 0) {
+        if (marker == (s32) ENDLESS_SAVE_LAYOUT_MARKER_VALUE) {
+            // v0.3/v0.4 layout: four categorized depths, no scores.
+            for (i = 0; i < 4; i++) {
+                depth = (s32) ((word >> (ENDLESS_SAVE_RECORD_BASE_SHIFT + (i * ENDLESS_SAVE_RECORD_BITS))) &
+                               ENDLESS_SAVE_RECORD_MASK);
+                if (depth > sEndlessRecords.rounds[i]) {
+                    sEndlessRecords.rounds[i] = depth;
+                }
+            }
+        } else {
+            // v0.2 layout: one shared depth+score; events and modes were not
+            // recorded, so Survival/Classic is its only unambiguous home.
+            depth = (s32) ((word >> ENDLESS_LEGACY_ROUNDS_SHIFT) & ENDLESS_LEGACY_ROUNDS_MASK);
+            score = (s32) ((word >> ENDLESS_LEGACY_SCORE_SHIFT) & ENDLESS_LEGACY_SCORE_MASK);
+            if (depth > 255) {
+                depth = 255;
+            }
+            if (depth > sEndlessRecords.rounds[0]) {
+                sEndlessRecords.rounds[0] = depth;
+                sEndlessRecords.scores[0] = score;
+            }
+        }
+        *get_eeprom_settings_pointer() = word & ~ENDLESS_SAVE_LAYOUT_MASK;
+        changed = TRUE;
     }
-    value &= ~ENDLESS_SAVE_LAYOUT_MASK;
-    value |= ENDLESS_SAVE_LAYOUT_MARKER_VALUE << ENDLESS_SAVE_LAYOUT_MARKER_SHIFT;
-    value |= ((u64) legacyRounds) << ENDLESS_SAVE_RECORD_BASE_SHIFT;
-    *get_eeprom_settings_pointer() = value;
-    mark_write_eeprom_settings();
+    if (changed) {
+        mark_write_eeprom_settings();
+    }
 }
 
 s32 endless_best_rounds(void) {
-    endless_ensure_record_layout();
-    return (s32) ((get_eeprom_settings() >> endless_record_shift()) & ENDLESS_SAVE_RECORD_MASK);
+    endless_ensure_records();
+    return sEndlessRecords.rounds[endless_record_category()];
+}
+
+static s32 endless_best_score(void) {
+    endless_ensure_records();
+    return sEndlessRecords.scores[endless_record_category()];
 }
 
 /**
- * Store this run if it reached deeper than this rules category's saved run.
- * The EEPROM has room for four categorized depths but not four full scores;
- * the full result score remains visible on the game-over receipt.
+ * Store this run if it beats this rules category's saved one: deeper always
+ * wins, and score breaks ties between equally deep runs. Scores fit again now
+ * that records live in the reclaimed save slot rather than the settings word.
  *
  * Called after every cleared round rather than only at the end, so a run still
  * counts if the console is reset or the player quits out mid-run.
  */
-s32 endless_record_run(s32 roundsCleared) {
-    u64 value;
-    u64 fieldMask;
-    s32 shift;
-    s32 bestRounds;
+s32 endless_record_run(s32 roundsCleared, s32 score) {
+    s32 category;
 
     if (!endless_records_enabled()) {
         return FALSE;
     }
-    bestRounds = endless_best_rounds();
-
-    if (roundsCleared > (s32) ENDLESS_SAVE_RECORD_MASK) {
-        roundsCleared = (s32) ENDLESS_SAVE_RECORD_MASK;
+    endless_ensure_records();
+    if (roundsCleared > 255) {
+        roundsCleared = 255;
     }
-    if (roundsCleared <= bestRounds) {
+    if (score > 65535) {
+        score = 65535;
+    }
+    category = endless_record_category();
+    if (roundsCleared <= 0 || roundsCleared < sEndlessRecords.rounds[category]) {
         return FALSE;
     }
-
-    shift = endless_record_shift();
-    fieldMask = ENDLESS_SAVE_RECORD_MASK << shift;
-    value = get_eeprom_settings();
-    value &= ~fieldMask;
-    value |= ((u64) roundsCleared) << shift;
-    *get_eeprom_settings_pointer() = value;
+    if (roundsCleared == sEndlessRecords.rounds[category] && score <= sEndlessRecords.scores[category]) {
+        return FALSE;
+    }
+    sEndlessRecords.rounds[category] = roundsCleared;
+    sEndlessRecords.scores[category] = score;
     mark_write_eeprom_settings();
     return TRUE;
 }
 
 /**
- * Treat Endless depths as part of Game Pak TIMES so the existing erase option
+ * Treat Endless records as part of Game Pak TIMES so the existing erase option
  * really returns every record category to a clean state.
  */
 void endless_clear_records(void) {
-    u64 value = get_eeprom_settings();
+    s32 i;
 
-    value &= ~ENDLESS_SAVE_LAYOUT_MASK;
-    *get_eeprom_settings_pointer() = value;
+    for (i = 0; i < ENDLESS_RECORDS_CATEGORIES; i++) {
+        sEndlessRecords.rounds[i] = 0;
+        sEndlessRecords.scores[i] = 0;
+    }
+    *get_eeprom_settings_pointer() = get_eeprom_settings() & ~ENDLESS_SAVE_LAYOUT_MASK;
     mark_write_eeprom_settings();
 }
 
@@ -1198,7 +1230,13 @@ char *endless_best_text(void) {
     }
     end = endless_append_string(sEndlessBestText, "BEST ");
     end = endless_append_number(end, endless_best_rounds());
-    endless_append_string(end, endless_best_rounds() == 1 ? " ROUND" : " ROUNDS");
+    end = endless_append_string(end, endless_best_rounds() == 1 ? " ROUND" : " ROUNDS");
+    // Migrated v0.3 records carry no score; only show one that exists.
+    if (endless_best_score() > 0) {
+        end = endless_append_string(end, "  ");
+        end = endless_append_number(end, endless_best_score());
+        endless_append_string(end, " PTS");
+    }
     return sEndlessBestText;
 }
 

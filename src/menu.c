@@ -7095,7 +7095,6 @@ void charselect_assign_ai(s32 charSlot) {
 s32 menu_character_select_loop(s32 updateRate) {
     s32 i;
     s32 charSlot;
-    s32 confirmOffset;
     s8 activePlayers[4];
     s32 j;
 
@@ -7127,13 +7126,6 @@ s32 menu_character_select_loop(s32 updateRate) {
         gMenuDelay += updateRate;
         if (gMenuDelay > 30) {
             // This offset will determine whether or not the game goes straight into the tracks menu.
-            confirmOffset = 0;
-            if (gEnteredCharSelectFrom == 0) {
-                confirmOffset++;
-                if (gActiveMagicCodes & CHEAT_TWO_PLAYER_ADVENTURE) {
-                    confirmOffset++;
-                }
-            }
             charselect_free();
 
             charSlot = 0;
@@ -7157,8 +7149,16 @@ s32 menu_character_select_loop(s32 updateRate) {
             //
             // The caution screen still comes first when it is due, and hands
             // over to the same place afterwards.
-            if (confirmOffset >= gNumberOfActivePlayers && gNumberOfActivePlayers == 1 &&
-                !gPlayerHasSeenCautionMenu) {
+            //
+            // Changing character from an ordinary Tracks post-race menu also
+            // funnels through here (gEnteredCharSelectFrom == 1); that flow
+            // returns to the track grid it came from, not into a fresh run.
+            if (gEnteredCharSelectFrom == 1) {
+                music_change_on();
+                trackmenu_set_records();
+                init_racer_headers();
+                menu_init(MENU_TRACK_SELECT);
+            } else if (gNumberOfActivePlayers == 1 && !gPlayerHasSeenCautionMenu) {
                 music_change_off();
                 load_level_for_menu(ASSET_LEVEL_OPTIONSBACKGROUND, -1, 0);
                 menu_init(MENU_CAUTION);
@@ -12025,15 +12025,19 @@ void endless_open_run(void) {
 }
 
 /**
- * ENDLESS: leave the mode for the menus it now skips past. Without this the
- * game-mode menu, and Adventure behind it, would be unreachable.
+ * ENDLESS: leave the mode for ordinary Tracks racing. This hack has retired
+ * adventure mode outright -- its save slots now hold the endless records -- so
+ * the game-mode menu that offered it is gone too, and backing out of a run
+ * lands on the track select grid directly.
  */
 void endless_leave_run(void) {
     endless_stop();
     gTrophyRaceWorldId = 0;
-    music_change_off();
-    load_level_for_menu(ASSET_LEVEL_OPTIONSBACKGROUND, -1, 0);
-    menu_init(MENU_GAME_SELECT);
+    music_change_on();
+    trackmenu_set_records();
+    init_racer_headers();
+    load_level_for_menu((s32) SPECIAL_MAP_ID_NO_LEVEL, -1, 0);
+    menu_init(MENU_TRACK_SELECT);
 }
 
 /**
@@ -15243,7 +15247,11 @@ void set_language(s32 language) {
  * Returns TRUE if the player has adventure two unlocked.
  */
 s32 is_adventure_two_unlocked(void) {
-    return sEepromSettings & 1;
+    // ENDLESS: adventure mode is retired, so its unlock can never be earned --
+    // but this flag gates Tracks-mode content too: the full track grid, the
+    // battle arenas, and the mirror option all key off it. Forcing it keeps
+    // that content alive; the adventure it used to unlock is unreachable.
+    return TRUE;
 }
 
 /**
@@ -15280,5 +15288,7 @@ s32 is_tt_unlocked(void) {
  * Returns 1 if Drumstick is available to use, or 0 if not.
  */
 s32 is_drumstick_unlocked(void) {
-    return gActiveMagicCodes & CHEAT_CONTROL_DRUMSTICK;
+    // ENDLESS: same reasoning as T.T. -- his unlock ritual lives in the retired
+    // adventure hub, so the full roster is simply available.
+    return TRUE;
 }

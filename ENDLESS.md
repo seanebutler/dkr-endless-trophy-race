@@ -19,7 +19,8 @@ changes, and the game data has to come from your own cartridge dump.
 
 ## Playing it
 
-Pick **Tracks mode → the Trophy Race column** (always unlocked in this hack).
+Choose a character and you are in — the run's setup screen opens straight from
+character select. **B** there backs out to ordinary Tracks racing.
 
 Every round draws a random track from a shuffle bag covering all 20 races
 across all five worlds, Future Fun Land included; each track appears once
@@ -77,8 +78,8 @@ somewhere a plane never passes, and an objective that cannot be completed is
 worse than no objective. The tally appearing at the start of a race is the
 tell that this round has a bounty.
 
-These share one switch because the save has room for four record categories,
-not eight — see below.
+These share one switch to keep runs comparable: one bit of rules is easy to
+say out loud with a seed, and four record categories stay legible on screen.
 
 Your round and what you need are on the HUD the whole race, turning red the
 moment you drop out of it, with a digital speed readout above them. Both sit
@@ -110,18 +111,19 @@ any player is granted to everyone on the next grid, trophy points are combined
 on the receipt, and every viewport shows the shared **TEAM** status. The
 quarter-screen layouts use a shorter version of the same line.
 
-Co-op runs are deliberately unranked. The Game Pak has room for the four solo
-rules categories but not another four co-op records, and letting an easier team
-run overwrite a solo best would make the saved depths incomparable.
+Co-op runs are deliberately unranked: a team result is not comparable with a
+solo one, and letting an easier team run overwrite a solo best would make the
+saved records meaningless.
 
 ### Records and seeds
 
 Points accumulate all run using the trophy scoring table (9/7/5/3/1). For solo
-runs, the game saves a separate best depth for each of the four rules
-categories: Survival or Time Attack, each with Events On or Off. The compact
-EEPROM fields top out at 127 cleared rounds and are cleared by erasing Game Pak
-Times. A v0.2 save's shared record is migrated to Survival with Events Off
-because the old save data did not identify which mode earned it.
+runs, the game saves a best depth **and score** for each of the four rules
+categories: Survival or Time Attack, each in Gauntlet or Classic. Deeper always
+wins; score breaks ties between equally deep runs. Records live in a
+checksummed block in the retired adventure save region (caps 255 rounds and
+65535 points) and are cleared by erasing Game Pak Times. Records from older
+versions are migrated in automatically the first time this build runs.
 
 The game-over screen is a run receipt with the seed and rules, cleared rounds,
 full score, final placement, remaining Time Attack clock, and a new-best flag.
@@ -142,8 +144,11 @@ previous level, which stops the menu music (that is why the code that opens
 this screen replays it straight after loading a track). Waiting for you to
 settle keeps a burst of edits to one interruption instead of one per keystroke.
 
-Adventure-mode trophy races are untouched and still play the vanilla four-round
-format. T.T. is on the roster from the start.
+Adventure mode is retired outright: this hack is the endless mode, and its
+save slots now hold the endless records. Everything adventure used to gate is
+simply open — the full track grid, the battle arenas, the mirror option, and
+the complete roster including T.T. and Drumstick. Backing out of the run setup
+with **B** lands on ordinary Tracks racing, the one other thing left to play.
 
 ## How it works
 
@@ -217,11 +222,14 @@ These cost real time to find, so they are written down rather than rediscovered:
   `Racer.lap_times` (a `u16[3]`) in the end-of-race copy in `objects.c`, which
   corrupts the adjacent racer's `trophy_points` — the very field this mode uses
   for scoring.
-- The EEPROM settings word has exactly 30 spare data bits: bits 0-25 are the
-  vanilla flags and `write_eeprom_settings` reserves 56-63 for its checksum.
-  Bits 26-27 mark the v0.3 layout and 28-55 hold four 7-bit category records.
-  There is not enough room for four persistent scores, so the receipt keeps the
-  full score while the saved personal best is depth-only.
+- The EEPROM is measured full: 512 of 512 bytes between three adventure saves,
+  the settings word, and two time-trial record blocks. Retiring adventure is
+  what created room — the endless records live in retired save slot A as a
+  checksummed, versioned 40-byte block (rounds and scores for four rules
+  categories, caps 255 and 65535, four more categories reserved). The
+  adventure save IO is gated off so its checksum self-heal cannot "repair"
+  the block back into a blank save, and older records in the settings word
+  are migrated in once and the word's 30 bits freed.
 - The vanilla rankings screen sets an option count of three while only filling
   two entries, so a stale pointer gets drawn as a third option.
 

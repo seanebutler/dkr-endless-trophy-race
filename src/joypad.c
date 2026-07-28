@@ -1,4 +1,5 @@
 #include "joypad.h"
+#include "endless.h"
 #include "game.h"
 #include "menu.h"
 #include "save_layout.h"
@@ -98,9 +99,13 @@ s32 input_update(s32 saveDataFlags, s32 updateRate) {
             // as the ones used to set the save file number to read from.
             if (saveDataFlags & SAVE_DATA_FLAG_READ_EEPROM_SETTINGS) {
                 read_eeprom_settings(get_eeprom_settings_pointer());
+                // ENDLESS: the records block rides the settings' read and
+                // write flags -- they change together and rarely.
+                read_endless_records(endless_records_pointer());
             }
             if (saveDataFlags & SAVE_DATA_FLAG_WRITE_EEPROM_SETTINGS) {
                 write_eeprom_settings(get_eeprom_settings_pointer());
+                write_endless_records(endless_records_pointer());
             }
             // Reset all flags
             saveDataFlags = 0;

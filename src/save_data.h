@@ -4,6 +4,7 @@
 #include "structs.h"
 #include "PR/os_pfs.h"
 #include "common.h"
+#include "save_layout.h"
 
 #define GAMD 0x47414D44 // 'GAMD' ASCII - Game Data?
 #define TIMD 0x54494D44 // 'TIMD' ASCII - Time Data?
@@ -129,6 +130,8 @@ s32 write_eeprom_data(Settings *settings, u8 flags);
 s32 calculate_eeprom_settings_checksum(u64 eepromSettings);
 s32 read_eeprom_settings(u64 *eepromSettings);
 s32 write_eeprom_settings(u64 *eepromSettings);
+s32 read_endless_records(EndlessRecords *records);
+s32 write_endless_records(EndlessRecords *records);
 s16 calculate_ghost_header_checksum(GhostHeader *ghostHeader);
 void func_80074AA8(GhostHeader *ghostHeader, s16 characterID, s16 time, s16 nodeCount, u8 *dest);
 s32 get_ghost_data_file_size(void);

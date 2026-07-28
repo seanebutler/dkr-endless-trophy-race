@@ -2,6 +2,7 @@
 #define _ENDLESS_H_
 
 #include "racer.h"
+#include "save_layout.h"
 #include "structs.h"
 #include "types.h"
 
@@ -57,7 +58,8 @@ s32 endless_ai_level(s32 baseLevel);
 void endless_scale_ai_table(AIBehaviourTable *table);
 s32 endless_score(void);
 s32 endless_best_rounds(void);
-s32 endless_record_run(s32 roundsCleared);
+EndlessRecords *endless_records_pointer(void);
+s32 endless_record_run(s32 roundsCleared, s32 score);
 void endless_clear_records(void);
 s32 endless_new_best(void);
 char *endless_round_text(void);

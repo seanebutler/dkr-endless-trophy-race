@@ -836,6 +836,12 @@ s32 read_save_file(s32 saveFileNum, Settings *settings) {
     s32 block;
     s32 ret;
 
+    // ENDLESS: adventure mode is retired and its EEPROM slots now hold the
+    // endless records block. Reading a slot as a save file would fail its
+    // checksum and trigger the erase-to-defaults self-heal below, wiping the
+    // records -- so the adventure save system does not touch EEPROM at all.
+    return TRUE;
+
     if (osEepromProbe(si_mesg()) == 0) {
         stubbed_printf("WARNING : No Eprom\n");
         return -1;
@@ -878,6 +884,9 @@ void erase_save_file(s32 saveFileNum, Settings *settings) {
     s32 worldCount;
     s32 address;
     s32 i;
+
+    // ENDLESS: the slots hold the endless records now; see read_save_file.
+    return;
 
     if (osEepromProbe(si_mesg()) != 0) {
         level_count(&levelCount, &worldCount);
@@ -939,6 +948,9 @@ s32 write_save_data(s32 saveFileNum, Settings *settings) {
     s32 address;
     s32 blocks;
     s32 i;
+
+    // ENDLESS: the slots hold the endless records now; see read_save_file.
+    return TRUE;
 
     if (osEepromProbe(si_mesg()) == 0) {
         stubbed_printf("WARNING : No Eprom\n");
@@ -1123,6 +1135,69 @@ s32 write_eeprom_settings(u64 *eepromSettings) {
     *eepromSettings |= (u64) (calculate_eeprom_settings_checksum(*eepromSettings)) << 56;
     if (is_reset_pressed() == FALSE) {
         osEepromWrite(si_mesg(), BLOCK_SIZE(CONFIG_START), (u8 *) eepromSettings);
+    }
+    return 1;
+}
+
+/**
+ * ENDLESS: byte sum of the records block after its checksum field, so an
+ * erased block (all 0xFF sums to 0x2542 against a 0xFFFF field) and a blank
+ * one both fail validation until the block is genuinely written.
+ */
+static u16 calculate_endless_records_checksum(EndlessRecords *records) {
+    u8 *bytes = (u8 *) records;
+    u16 sum = 0;
+    s32 i;
+
+    for (i = sizeof(records->checksum); i < (s32) sizeof(EndlessRecords); i++) {
+        sum += bytes[i];
+    }
+    return sum;
+}
+
+/**
+ * ENDLESS: read the records block out of the retired save slot A. An invalid
+ * block -- fresh EEPROM, or pre-retirement adventure data -- is zeroed with
+ * version 0, which endless.c treats as "never written" and migrates into.
+ */
+s32 read_endless_records(EndlessRecords *records) {
+    u8 *bytes = (u8 *) records;
+    s32 block;
+    s32 i;
+
+    if (osEepromProbe(si_mesg()) == 0) {
+        stubbed_printf("WARNING : No Eprom\n");
+        return -1;
+    }
+    for (block = 0; block < (s32) BLOCK_SIZE(sizeof(EndlessRecords)); block++) {
+        osEepromRead(si_mesg(), BLOCK_SIZE(ENDLESS_RECORDS_START) + block, bytes + (block * sizeof(u64)));
+    }
+    if (records->version != ENDLESS_RECORDS_VERSION ||
+        records->checksum != calculate_endless_records_checksum(records)) {
+        for (i = 0; i < (s32) sizeof(EndlessRecords); i++) {
+            bytes[i] = 0;
+        }
+    }
+    return 1;
+}
+
+/**
+ * ENDLESS: write the records block into the retired save slot A.
+ */
+s32 write_endless_records(EndlessRecords *records) {
+    u8 *bytes = (u8 *) records;
+    s32 block;
+
+    if (osEepromProbe(si_mesg()) == 0) {
+        stubbed_printf("WARNING : No Eprom\n");
+        return -1;
+    }
+    records->version = ENDLESS_RECORDS_VERSION;
+    records->checksum = calculate_endless_records_checksum(records);
+    if (is_reset_pressed() == FALSE) {
+        for (block = 0; block < (s32) BLOCK_SIZE(sizeof(EndlessRecords)); block++) {
+            osEepromWrite(si_mesg(), BLOCK_SIZE(ENDLESS_RECORDS_START) + block, bytes + (block * sizeof(u64)));
+        }
     }
     return 1;
 }
