@@ -95,18 +95,27 @@ starts, so the rules cannot change halfway through a run.
 - **Survival** — meet the round's required finish position or the run ends.
   It tightens as you go: top 4 (rounds 1-3) → top 3 (4-6) → top 2 (7-9) →
   **1st only** (10+).
-- **Season** — a finite, comparable score attack. Exactly twenty races, one
-  full shuffle bag, every track once. Nothing can eliminate you: a disastrous
+- **Season** — a finite, comparable score attack. **Ten races**, drawn from
+  the shuffle bag, no track repeated. Nothing can eliminate you: a disastrous
   race costs points and nothing else, so two players who race the same seed
-  both finish twenty races and can compare a single number. The run ends after
-  race twenty and the receipt reads **SEASON COMPLETE** rather than GAME OVER.
-  Maximum score is 180 — twenty wins at nine points each.
+  both finish ten races and can compare a single number. The run ends after
+  race ten and the receipt reads **SEASON COMPLETE** rather than GAME OVER.
+  Maximum score is 90 — ten wins at nine points each.
 
-  A season escalates on its own schedule. The endless ramp is built for a run
-  with no end and spends little of its range inside twenty races: the AI
-  behaviour table saturates at race 8, and the speed bonus needs race 40 to
-  reach its cap. A season instead scales that bonus so the final race lands
-  exactly on the cap, which turns a flat back two-thirds into a real arc.
+  Ten rather than twenty because an hour is a length people actually sit down
+  for, where two hours is a commitment. The trade is that a season is ten of
+  the twenty tracks rather than all of them, which makes the *selection* part
+  of what a seed decides and not merely the order — two seeds are now different
+  seasons, not the same season shuffled.
+
+  A season escalates on a schedule sized to its own length. The endless ramp is
+  built for a run with no end and would barely start inside ten races: the AI
+  behaviour table climbs one step per race and the speed bonus does not reach
+  its cap until race 40. In a season the table spends races 1-8 climbing
+  through all eight personalities, mirrored tracks arrive as coin flips from
+  race 5 and every race from race 7, and the speed bonus is scaled to land
+  exactly on its cap on the final race. Change `ENDLESS_SEASON_RACES` and all
+  three schedules follow it.
 - **Time Attack** — placement never ends the run. Instead every race is settled
   against a three-minute run clock, refunded as a share of that race's own
   duration: winning buys 30% back, fourth costs 10%, trailing costs 25%. The
@@ -135,9 +144,9 @@ categories: Survival, Time Attack or Season, each in Gauntlet or Classic.
 Deeper always wins; score breaks ties between equally deep runs.
 
 That comparator needs no special case for a season: every completed season ties
-at the same depth of twenty, so the score alone decides, which is exactly the
-score-attack semantics. An abandoned season records the races it did clear and
-loses to any completed one.
+at the same depth, so the score alone decides, which is exactly the score-attack
+semantics. An abandoned season records the races it did clear and loses to any
+completed one.
 
 One honest limit of the scoring table in a mode with no elimination: positions
 6th through 8th all award zero, so the very bottom of a season's range is flat.

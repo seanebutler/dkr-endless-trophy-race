@@ -49,17 +49,14 @@
 #define ENDLESS_TA_PCT_FOURTH (-10)
 #define ENDLESS_TA_PCT_REST (-25)
 
-// Twenty-Race Season. A finite score attack over exactly one full shuffle bag:
-// every track is raced once, nothing eliminates the player, and the total score
-// is the record. The season's length is the bag's size rather than a literal 20,
-// so it stays correct if the pool is ever filtered differently.
+// Season: a finite score attack drawn from the shuffle bag, where nothing can
+// eliminate the player and the total score is the record. Ten races is about an
+// hour, which is a length someone will actually sit down for; a full twenty-race
+// bag ran to two. The cost is that a season is now ten of the twenty tracks
+// rather than all of them -- so which tracks you get is part of what the seed
+// decides, not just their order.
+#define ENDLESS_SEASON_RACES 10
 #define ENDLESS_SEASON_WIN_POINTS 9 // gTrophyRacePointsArray's first-place award.
-// The endless ramp is built for an unbounded run and spends almost none of its
-// range inside twenty races: the behaviour table saturates at race 8, and the
-// speed bonus needs race 40 to reach its cap, so a season's back two thirds
-// would be flat. A season runs the same escalation on its own schedule, sized
-// so the final race lands on the cap instead of 37% of the way to it.
-#define ENDLESS_SEASON_SPEED_PER_HEAT 0.3333f
 
 // Seeds are four digits so they can be read out loud and typed back in.
 #define ENDLESS_SEED_MAX 9999
@@ -387,14 +384,53 @@ static void endless_shuffle_pool(void) {
 }
 
 /**
- * How many races a season is: the size of the shuffle bag, so a season is
- * exactly "every track once" by construction rather than by a matching literal.
+ * How many races a season is. Clamped to the bag: asking for more races than
+ * there are tracks would reshuffle mid-season and repeat one, which would break
+ * the promise that a season never shows the same track twice.
  */
 static s32 endless_season_length(void) {
     if (sEndlessPoolSize <= 0) {
         endless_build_pool();
     }
+    if (ENDLESS_SEASON_RACES < sEndlessPoolSize) {
+        return ENDLESS_SEASON_RACES;
+    }
     return sEndlessPoolSize;
+}
+
+/**
+ * A season escalates on a schedule sized to its own length rather than the
+ * endless one, so its final race lands exactly on the speed cap whatever
+ * ENDLESS_SEASON_RACES is set to. Without this a ten-race season would finish
+ * at a sixth of the intended difficulty, and a twenty-race one at a third.
+ */
+static f32 endless_season_speed_per_heat(void) {
+    s32 finalHeat = (endless_season_length() - 1) - ENDLESS_HEAT_START_ROUND;
+
+    if (finalHeat <= 0) {
+        return ENDLESS_SPEED_PER_HEAT;
+    }
+    return ENDLESS_SPEED_BONUS_CAP / finalHeat;
+}
+
+/**
+ * When this race mirrors. The endless schedule is absolute -- a coin flip from
+ * round 9, always from round 13 -- which a short season would end before ever
+ * reaching. A season scales those points to its own length instead, so it still
+ * passes through clean, uncertain and mirrored phases. At twenty races this
+ * reproduces the endless schedule exactly.
+ */
+static void endless_mirror_schedule(s32 *chanceFrom, s32 *alwaysFrom) {
+    s32 length;
+
+    if (gEndlessMode != ENDLESS_MODE_SEASON) {
+        *chanceFrom = ENDLESS_MIRROR_CHANCE_ROUND;
+        *alwaysFrom = ENDLESS_MIRROR_ALWAYS_ROUND;
+        return;
+    }
+    length = endless_season_length();
+    *chanceFrom = (length * ENDLESS_MIRROR_CHANCE_ROUND) / ENDLESS_MAX_POOL;
+    *alwaysFrom = (length * ENDLESS_MIRROR_ALWAYS_ROUND) / ENDLESS_MAX_POOL;
 }
 
 /**
@@ -494,6 +530,8 @@ void endless_advance_round(void) {
  */
 s32 endless_pick_track(void) {
     s8 temp;
+    s32 mirrorChanceFrom;
+    s32 mirrorAlwaysFrom;
 
     if (sEndlessPoolSize <= 0) {
         endless_build_pool();
@@ -515,9 +553,10 @@ s32 endless_pick_track(void) {
     sEndlessPoolCursor++;
     sEndlessLastTrack = gEndlessTrackId;
 
-    if (gEndlessRound >= ENDLESS_MIRROR_ALWAYS_ROUND) {
+    endless_mirror_schedule(&mirrorChanceFrom, &mirrorAlwaysFrom);
+    if (gEndlessRound >= mirrorAlwaysFrom) {
         gEndlessMirrorThisRace = TRUE;
-    } else if (gEndlessRound >= ENDLESS_MIRROR_CHANCE_ROUND) {
+    } else if (gEndlessRound >= mirrorChanceFrom) {
         gEndlessMirrorThisRace = endless_rng_range(1);
     } else {
         gEndlessMirrorThisRace = FALSE;
@@ -1108,7 +1147,7 @@ void endless_scale_ai_table(AIBehaviourTable *table) {
     // A season is over before the endless schedule has spent much of its range,
     // so it escalates faster: its last race lands on the cap rather than at 37%.
     f32 perHeat =
-        (gEndlessMode == ENDLESS_MODE_SEASON) ? ENDLESS_SEASON_SPEED_PER_HEAT : ENDLESS_SPEED_PER_HEAT;
+        (gEndlessMode == ENDLESS_MODE_SEASON) ? endless_season_speed_per_heat() : ENDLESS_SPEED_PER_HEAT;
     f32 bonus;
     s32 value;
     s32 i;
