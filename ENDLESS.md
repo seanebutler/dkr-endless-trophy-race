@@ -252,6 +252,26 @@ These cost real time to find, so they are written down rather than rediscovered:
   `Racer.lap_times` (a `u16[3]`) in the end-of-race copy in `objects.c`, which
   corrupts the adjacent racer's `trophy_points` — the very field this mode uses
   for scoring.
+- **The free EEPROM is 80 bytes, not 92, and both its offset and its size are
+  load-bearing.** Retiring adventure freed 120 bytes; the records block took 40
+  of them. The remaining 80 (byte offsets 40-119, blocks 5-14) are contiguous
+  and allocatable. The other 12 unused bytes are `EndlessRecords.spare[12]` at
+  offsets 28-39, which sit *inside* the live checksummed block and straddle a
+  block boundary — they can only be spent by adding fields to `EndlessRecords`,
+  never by starting a new struct there. Nothing else can write to the arena:
+  every `osEepromWrite` call site is in `save_data.c`, and the two that could
+  reach it are behind the gated adventure functions.
+
+- **`BLOCK_SIZE` truncates silently, so a misaligned save struct fails without
+  a word of warning.** It is `(x / sizeof(u64))` with no rounding and no assert.
+  A struct starting at byte 68 resolves to block 8 = byte 64 and quietly
+  overlaps its neighbour; a 44-byte struct resolves to 5 blocks and only ever
+  persists its first 40 bytes, the rest reading back as stale RAM. Both the
+  start offset and the size must be multiples of 8 — that is precisely why
+  `EndlessRecords` carries `spare[12]`, rounding 28 up to 40. The libultra
+  bounds check is `address > EEPROM_MAXBLOCKS`, an off-by-one that would let
+  block 64 through, so it will not catch an overrun for you.
+
 - The EEPROM is measured full: 512 of 512 bytes between three adventure saves,
   the settings word, and two time-trial record blocks. Retiring adventure is
   what created room — the endless records live in retired save slot A as a
@@ -285,5 +305,35 @@ These cost real time to find, so they are written down rather than rediscovered:
   between the title and the track name, spaced so they read as separate facts;
   a fifth would start crowding them back together.
 - No leaderboard or ghost sharing beyond the seed and run receipt.
+- **A standing record does not remember its own seed.** The intro prints the
+  seed of the run in front of you, and the BEST line prints a score with no
+  provenance, so the record you are chasing cannot be re-raced. This is a hole
+  in Season rather than a missing extra, and the fix is free: `bestSeeds[6]` as
+  `u16` replaces `spare[12]` in place, leaving the struct 40 bytes, its
+  alignment, and its checksum coverage all unchanged.
+
+## Ruled out
+
+Verified against the code and rejected, so they are not re-proposed:
+
+- **Suspending a run between races.** Needs about 40 bytes rather than the 16 it
+  looks like, because the run's real state is larger than it appears:
+  `racers[].character` is a derived copy that `init_racer_headers` overwrites
+  from `gCharacterIdSlots`, and all eight racers' `trophy_points` are live —
+  endless skips the vanilla per-round reset, so the standings table is built
+  from every racer and a naive resume lands on a screen with seven AI racers on
+  zero. Replaying the RNG must also step the round rather than just re-seed,
+  since whether a pick consumes a draw depends on it. Beyond the cost, a resume
+  makes save-scumming unfixable while records are written after every round —
+  against the point of a comparable mode. Ten-race seasons run about an hour,
+  which is what this was for.
+- **Per-track best boards.** A season visits 10 of the 20 bag tracks, so half
+  the board is unreachable in any given season, and a best-per-track number over
+  a difficulty-ramped draw order measures *when* you drew the track rather than
+  the track: race 1 is always the weakest AI table, never mirrored, never an
+  event. The optimal way to fill such a board is to win race 1 and take a new
+  seed, which rewards quitting out of runs.
+- **Anything dated.** There is no real-time clock, so "daily seed" and any
+  date-stamped record cannot exist on this hardware.
 - Interface strings added by the hack are English-only until they move into the
   localized menu asset pipeline.
