@@ -39,7 +39,7 @@ taking back rather than an edge that snowballs.
 **Gauntlet** adds two seeded rule layers on top of the base run. Every round is
 assigned a vehicle, and every fourth race adds a rule from a twelve-card deck:
 no weapons, no zippers, four wheel drive, no banana limit, big racers, small
-racers, or one of the balloon rules — boost, shield, rockets, magnets, rainbow,
+racers, or one of the balloon rules — boost, shield, rockets, traps, magnets,
 or maximum power.
 
 Every card maps to a magic code the game already implements, and each one
@@ -282,6 +282,11 @@ These cost real time to find, so they are written down rather than rediscovered:
   are migrated in once and the word's 30 bits freed.
 - The vanilla rankings screen sets an option count of three while only filling
   two entries, so a stale pointer gets drawn as a third option.
+- **Balloon colours do not match their effects by name.** From
+  `obj_init_balloon`: blue is boost, red is missile, **green is the trap**
+  (mines, oil slicks, bubbles) and **rainbow is the magnet**. Naming an event
+  card after the colour rather than checking the mapping announced one rule and
+  ran another for a release.
 - **FUNFONT has no slash glyph.** A missing glyph is skipped without advancing
   the pen, so `"7/20"` renders as `720` — silently, with no gap to hint at it.
   Every progress string in this mode spells out `" OF "` for that reason.

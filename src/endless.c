@@ -87,6 +87,10 @@
 // declared but read nowhere in the ROM, so it would announce a rule and change
 // nothing, and the banana-suppressing codes would quietly void a head start or
 // a coin bounty the player had just earned.
+// Balloon colours do not map to their effects by name, and getting this wrong
+// announces one rule while running another. From obj_init_balloon
+// (object_functions.c): blue is boost, red is missile, GREEN IS TRAP, yellow is
+// shield, and RAINBOW IS THE MAGNET -- not green, and not merely "rainbow".
 typedef enum EndlessEvent {
     ENDLESS_EVENT_NONE,
     ENDLESS_EVENT_NO_WEAPONS,
@@ -95,8 +99,8 @@ typedef enum EndlessEvent {
     ENDLESS_EVENT_SHIELD_BALLOONS,
     ENDLESS_EVENT_MAX_POWER,
     ENDLESS_EVENT_ROCKETS,
+    ENDLESS_EVENT_TRAPS,
     ENDLESS_EVENT_MAGNETS,
-    ENDLESS_EVENT_RAINBOW,
     ENDLESS_EVENT_BANANA_HOARD,
     ENDLESS_EVENT_FOUR_WHEEL_DRIVE,
     ENDLESS_EVENT_BIG_RACERS,
@@ -848,9 +852,9 @@ s32 endless_event_cheats(void) {
             return CHEAT_MAXIMUM_POWER_UP;
         case ENDLESS_EVENT_ROCKETS:
             return CHEAT_ALL_BALLOONS_ARE_RED;
-        case ENDLESS_EVENT_MAGNETS:
+        case ENDLESS_EVENT_TRAPS:
             return CHEAT_ALL_BALLOONS_ARE_GREEN;
-        case ENDLESS_EVENT_RAINBOW:
+        case ENDLESS_EVENT_MAGNETS:
             return CHEAT_ALL_BALLOONS_ARE_RAINBOW;
         case ENDLESS_EVENT_BANANA_HOARD:
             return CHEAT_NO_LIMIT_TO_BANANAS;
@@ -879,10 +883,10 @@ char *endless_event_text(void) {
             return "EVENT  MAX POWER";
         case ENDLESS_EVENT_ROCKETS:
             return "EVENT  ROCKETS ONLY";
+        case ENDLESS_EVENT_TRAPS:
+            return "EVENT  TRAPS ONLY";
         case ENDLESS_EVENT_MAGNETS:
             return "EVENT  MAGNETS ONLY";
-        case ENDLESS_EVENT_RAINBOW:
-            return "EVENT  RAINBOW BALLOONS";
         case ENDLESS_EVENT_BANANA_HOARD:
             return "EVENT  NO BANANA LIMIT";
         case ENDLESS_EVENT_FOUR_WHEEL_DRIVE:
