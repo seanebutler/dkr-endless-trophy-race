@@ -12041,6 +12041,37 @@ void endless_leave_run(void) {
 }
 
 /**
+ * ENDLESS: leave a finished run for character select rather than the track grid.
+ *
+ * Quitting a run nearly always means "again, differently" -- another character,
+ * another seed -- and character select is the front door of that loop, since
+ * confirming there opens a fresh run setup. The track grid is still reachable by
+ * backing out of the setup screen with B, which is the way to the rest of the
+ * game rather than the way to another run.
+ */
+static void endless_quit_to_charselect(void) {
+    s32 charSelectScene = 0;
+
+    endless_stop();
+    gTrophyRaceWorldId = 0;
+    music_change_on();
+    // The race just run left its results in the racer headers; character select
+    // reads them for the roster, so restore the clean grid first.
+    init_racer_headers();
+    if (is_drumstick_unlocked()) {
+        charSelectScene = 1;
+    }
+    if (is_tt_unlocked()) {
+        charSelectScene ^= 3;
+    }
+    load_level_for_menu(ASSET_LEVEL_CHARACTERSELECT, -1, charSelectScene);
+    // Arriving "from nowhere" is what makes the next confirm open a run instead
+    // of bouncing back to the track grid the way a post-race character swap does.
+    charselect_prev(0, NULL);
+    menu_init(MENU_CHARACTER_SELECT);
+}
+
+/**
  * ENDLESS: re-derive the first round's track after the seed changed. Updates
  * everything cheap -- the track, its world, the default vehicle -- and leaves
  * the backdrop reload to the caller, which defers it while digits are still
@@ -12723,9 +12754,7 @@ s32 menu_trophy_race_rankings_loop(s32 updateRate) {
                         endless_new_seed();
                         menu_init(MENU_TROPHY_RACE_ROUND);
                     } else {
-                        endless_stop();
-                        gTrophyRaceWorldId = 0;
-                        menu_init(MENU_TRACK_SELECT);
+                        endless_quit_to_charselect();
                     }
                 } else if (gTrophyRaceRound < 4) {
                     menu_init(MENU_TROPHY_RACE_ROUND);

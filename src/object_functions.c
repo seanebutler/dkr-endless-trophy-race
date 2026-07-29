@@ -4517,6 +4517,12 @@ void obj_init_silvercoin_adv2(Object *obj, UNUSED LevelObjectEntry_SilverCoinAdv
         } else {
             obj->properties.silverCoin.action = SILVER_COIN_INACTIVE;
         }
+        // ENDLESS: mirrored rounds use this set. Vanilla only ever placed it for
+        // Adventure 2, which IS mirror mode, so these are the coordinates that
+        // were authored against a mirrored racing line -- the adventure-one set
+        // ends up somewhere a mirrored lap never goes.
+    } else if (endless_bounty_active() && endless_mirrored()) {
+        obj->properties.silverCoin.action = SILVER_COIN_ACTIVE;
     }
     if (obj->properties.silverCoin.action == SILVER_COIN_INACTIVE) {
         obj->trans.flags |= OBJ_FLAGS_INVIS_PLAYER1 | OBJ_FLAGS_INVIS_PLAYER2;
@@ -4536,10 +4542,11 @@ void obj_init_silvercoin(Object *obj, UNUSED LevelObjectEntry_SilverCoin *entry)
     obj->properties.silverCoin.action = SILVER_COIN_INACTIVE;
     obj->properties.silverCoin.timer = 0;
     // ENDLESS: the bounty runs in Tracks mode, which this guard otherwise
-    // excludes outright. Only this variant is woken -- the adventure-two set
-    // sits in the same maps, and activating both would put two coins on every
-    // pad.
-    if (!is_in_tracks_mode() || endless_bounty_active()) {
+    // excludes outright. Every map carries two complete coin sets at different
+    // positions -- this one and the adventure-two set -- so exactly one is woken
+    // or there would be two coins on every pad. A mirrored round takes the other
+    // set, which is the one authored for a mirrored racing line.
+    if (!is_in_tracks_mode() || (endless_bounty_active() && !endless_mirrored())) {
         if (check_if_silver_coin_race() && !is_in_adventure_two()) {
             obj->properties.silverCoin.action = SILVER_COIN_ACTIVE;
         } else {

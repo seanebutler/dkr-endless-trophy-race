@@ -86,6 +86,12 @@ nothing, so each mode keeps exactly one way to end a run. What they add is a
 second racing line worth weighing against position, since the detour to a coin
 is usually the slow way round.
 
+Every map carries **two** complete eight-coin layouts at different positions:
+the one Adventure 1 uses, and the one Adventure 2 uses. Adventure 2 is mirror
+mode, so its layout is the one authored against a mirrored racing line — a
+mirrored round therefore uses that set, and an ordinary round the other. Using
+the wrong one puts coins where a lap never goes.
+
 The bounty only runs when the gauntlet's vehicle draw matches the track's own
 default — always, on single-vehicle tracks. The coins are placed along the
 route that vehicle takes, so flying the same course can leave some of them
@@ -298,6 +304,11 @@ These cost real time to find, so they are written down rather than rediscovered:
   are migrated in once and the word's 30 bits freed.
 - The vanilla rankings screen sets an option count of three while only filling
   two entries, so a stale pointer gets drawn as a third option.
+- **Mirror mode is a rendering flip, not a world transform.** `tracks.c` mirrors
+  the track display list and `racer.c` negates the steering to match; object
+  world positions are untouched. So objects do move with the track visually, but
+  anything authored *for* a particular racing line still has to be chosen per
+  layout — which is why the silver coins need the Adventure 2 set when mirrored.
 - **Balloon colours do not match their effects by name.** From
   `obj_init_balloon`: blue is boost, red is missile, **green is the trap**
   (mines, oil slicks, bubbles) and **rainbow is the magnet**. Naming an event
