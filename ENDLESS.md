@@ -312,6 +312,18 @@ These cost real time to find, so they are written down rather than rediscovered:
   Terminal speed is `sqrt(425 * tail * (1 + 0.025 * bananas))`, so a weak base
   cannot be rescued by bananas — this is why the AI felt slow no matter what
   the behaviour table said.
+- **All three vehicles share one speed law**, so difficulty scales identically
+  across them. Car (`update_car_velocity_ground`), hovercraft (`func_80046524`)
+  and plane (`func_80049794`) all apply quadratic drag at 0.004 against a thrust
+  of curve x banana-multiplier x 1.7, 1.7 and 1.8 respectively, giving
+  `v = sqrt(425 * C * M)` for car and hovercraft and `sqrt(450 * C * M)` for the
+  plane. The plane is therefore 2.9% faster outright — but that applies to every
+  racer in the flight, so it cancels out of any AI-versus-human comparison. The
+  `velocity *` drag branch in the hovercraft and plane code is a low-speed case
+  that only fires below `v = 1` while coasting; it never applies while racing.
+  The one real asymmetry is that the car's drag comes from
+  `gSurfaceTractionTable` and varies by surface, where the other two hardcode
+  0.004 — so car rounds vary more track to track.
 - **An AI's speed is its `unk124`, which the engine substitutes for its banana
   count.** Giving an AI real bananas does nothing. It is clamped to 20 against
   the human's 10, and `unk4` is the *leading* AI's value while `unk0` is the
