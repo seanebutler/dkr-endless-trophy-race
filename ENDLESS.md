@@ -202,6 +202,16 @@ simply open — the full track grid, the battle arenas, the mirror option, and
 the complete roster including T.T. and Drumstick. Backing out of the run setup
 with **B** lands on ordinary Tracks racing, the one other thing left to play.
 
+The title screen carries the hack's own wordmark under the Diddy Kong Racing
+logo: **ENDLESS** at double size with a drop shadow and a slow ember pulse, and
+**TROPHY RACE** fading in beneath it once the stamp lands.
+
+There is no new artwork behind that. BIGFONT is the one font in the game with a
+separate texture page per glyph, so the word is assembled at runtime from those
+pages and handed to the same scaled-texture draw the DKR logo itself uses —
+which is the only way to get lettering at a size other than BIGFONT's fixed 28
+pixels, since the text renderer has no scale parameter anywhere on its path.
+
 ## How it works
 
 All of the mode's own logic lives in [`src/endless.c`](src/endless.c) /
@@ -309,6 +319,20 @@ These cost real time to find, so they are written down rather than rediscovered:
   world positions are untouched. So objects do move with the track visually, but
   anything authored *for* a particular racing line still has to be chosen per
   layout — which is why the silver coins need the Adventure 2 set when mirrored.
+- **The texrect combiner multiplies by the primitive colour, so it can only
+  darken.** BIGFONT's letters are natively yellow over a blue outline, and no
+  primitive colour can make them brighter or bluer than that — the title's
+  colour cycle runs from deep ember up to the font's own yellow because that is
+  the whole available range, not a preference. A zero primitive gives a true
+  black silhouette, which is how the drop shadow is drawn.
+- **A fully opaque alpha selects a different blend mode.** Passing 255 picks the
+  opaque table, which ignores the alpha channel and would draw every glyph
+  page's transparent padding as a solid block. The vanilla logo passes 254 for
+  exactly this reason, and so does the wordmark.
+- **Unloading a font NULLs its texture pointers and the next load returns
+  different addresses.** Anything borrowing glyph pages must rebuild them on
+  every entry to the screen; a build-once array renders correctly on the first
+  visit and hands freed memory to the display list on the second.
 - **Balloon colours do not match their effects by name.** From
   `obj_init_balloon`: blue is boost, red is missile, **green is the trap**
   (mines, oil slicks, bubbles) and **rainbow is the magnet**. Naming an event

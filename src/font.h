@@ -56,6 +56,10 @@ typedef struct FontData {
 /* 0x100 */ FontCharData letter[96];
 } FontData;
 
+// ENDLESS: the wordmark on the title screen borrows BIGFONT's per-glyph
+// textures out of this, so it needs to be reachable from menu.c.
+extern FontData *gFonts;
+
 /* Size: 0x20 bytes */
 //Dialogue Box text linked list (Including background struct)
 typedef struct DialogueBox {

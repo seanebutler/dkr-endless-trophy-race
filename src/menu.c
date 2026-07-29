@@ -662,6 +662,77 @@ DrawTexture sGameTitleTileOffsets[12] = { { NULL, -75, -32 }, { NULL, -60, -32 }
                                           { NULL, 15, -32 },  { NULL, 30, -32 },  { NULL, 45, -32 },
                                           { NULL, 60, -32 },  { NULL, 75, -32 },  { NULL, 0, 0 } };
 
+// ENDLESS: the hack's wordmark is assembled at runtime out of BIGFONT's
+// per-letter textures. BIGFONT is unique among the fonts in having one page per
+// glyph, so an array of those pages feeds texrect_draw_scaled exactly like the
+// DKR logo above does -- and that is the only way to get lettering at a size
+// other than BIGFONT's fixed 28px, because render_text_string hardcodes its
+// texture scale and takes no size parameter anywhere on its path.
+#define ENDLESS_TITLE_TEXT "ENDLESS"
+#define ENDLESS_TITLE_LEN 7      // Must equal the length of ENDLESS_TITLE_TEXT.
+#define ENDLESS_TITLE_PUNCH 0.18f // Seconds for the stamp to settle.
+#define ENDLESS_TITLE_FADE 0.22f  // Seconds for the strapline to fade up.
+#define ENDLESS_TITLE_SCALE 2.0f  // Resting scale: a 28px cap becomes 56px.
+#define ENDLESS_TITLE_KICK 0.4f   // Overshoot at t=0, so it lands rather than appears.
+#define ENDLESS_TITLE_Y 116.0f    // Centre row of the wordmark.
+#define ENDLESS_LINE_Y 164        // Strapline, mid-aligned.
+
+static DrawTexture sEndlessTitleGlyphs[ENDLESS_TITLE_LEN + 1];
+
+/**
+ * ENDLESS: build the scalable wordmark from BIGFONT's glyph pages.
+ *
+ * texrect_draw_scaled always samples a whole page from its origin, so each page
+ * is shifted left by that glyph's own source origin to land the ink where
+ * draw_text would have put it; the surrounding transparent padding costs
+ * nothing. Offsets are then re-originned on the word's centre, because the
+ * scaling multiplies offsets as well as sizes -- centring is what makes the
+ * word grow about its own middle instead of its left edge.
+ *
+ * MUST be called on every entry to the title screen rather than once. Unloading
+ * the font NULLs its texture pointers and the next load returns different
+ * addresses, so a build-once array would hand freed memory to the display list
+ * on the second visit.
+ */
+void endless_title_build(void) {
+    FontData *font = &gFonts[ASSET_FONTS_BIGFONT];
+    s32 pen = 0;
+    s32 right = 0;
+    s32 count = 0;
+    s32 i;
+    s32 ch;
+    s32 edge;
+
+    for (i = 0; i < ENDLESS_TITLE_LEN; i++) {
+        ch = ENDLESS_TITLE_TEXT[i] - 0x20;
+        // A missing glyph would leave a NULL mid-array, which the draw loop
+        // reads as the terminator and would silently truncate the word.
+        // BIGFONT carries letters only -- a digit or punctuation added to the
+        // string above would land here and quietly disappear.
+        if (font->letter[ch].textureID == 0xFF) {
+            continue;
+        }
+        sEndlessTitleGlyphs[count].texture = font->texturePointers[font->letter[ch].textureID];
+        if (sEndlessTitleGlyphs[count].texture == NULL) {
+            continue;
+        }
+        sEndlessTitleGlyphs[count].xOffset = pen + font->letter[ch].width - font->letter[ch].s;
+        sEndlessTitleGlyphs[count].yOffset = font->letter[ch].height - font->letter[ch].t;
+        edge = sEndlessTitleGlyphs[count].xOffset + sEndlessTitleGlyphs[count].texture->width;
+        if (edge > right) {
+            right = edge;
+        }
+        pen += font->letter[ch].ulx;
+        count++;
+    }
+    sEndlessTitleGlyphs[count].texture = NULL;
+
+    for (i = 0; i < count; i++) {
+        sEndlessTitleGlyphs[i].xOffset -= right >> 1;
+        sEndlessTitleGlyphs[i].yOffset -= 14; // Half BIGFONT's cap height.
+    }
+}
+
 // Title screen cinematic text
 unk800DF83C gTitleCinematicText[10] = {
     { "TIMBER", 14.0f, 14.5f, 16.5f, 17.0f, -80.0f, SCREEN_HEIGHT_FLOAT - 32.0f, SCREEN_WIDTH_FLOAT_HALF,
@@ -3353,6 +3424,11 @@ void menu_title_screen_init(void) {
     set_text_font(ASSET_FONTS_FUNFONT);
 #if REGION != REGION_JP
     load_font(ASSET_FONTS_BIGFONT);
+    // ENDLESS: the wordmark borrows this font's glyph pages, so it can only be
+    // built once the font is resident -- and must be rebuilt on every entry,
+    // because titlescreen_free unloads it and the next load returns different
+    // addresses.
+    endless_title_build();
 #endif
     sound_volume_reset(FALSE);
     set_time_trial_enabled(FALSE);
@@ -3395,6 +3471,75 @@ void render_title_screen(UNUSED s32 updateRate, f32 updateRateF) {
         } else {
             texrect_draw(&sMenuCurrDisplayList, sGameTitleTileOffsets, SCREEN_WIDTH_HALF, 52, 255, 255, 255, 255);
         }
+#if REGION != REGION_JP
+        // ENDLESS: the wordmark arrives only once the logo has landed. The
+        // reveal timer stops at exactly 32 and is not touched again, which
+        // makes it a clean one-shot "logo has arrived" flag, and the audio
+        // counter sits at zero for the whole reveal and only starts running
+        // afterwards -- a free, already region-normalised timeline.
+        if (gTitleRevealTimer == 32 && sEndlessTitleGlyphs[0].texture != NULL) {
+            f32 punch = gTitleAudioCounter * (1.0f / ENDLESS_TITLE_PUNCH);
+            f32 rest;
+            f32 wordScale;
+            s32 wordAlpha;
+            s32 lineAlpha;
+            s32 pulse;
+
+            if (punch > 1.0f) {
+                punch = 1.0f;
+            }
+            rest = 1.0f - punch;
+            // Materialises oversized and decelerates into place, landing on the
+            // camera shake the screen already fires at this moment.
+            wordScale = ENDLESS_TITLE_SCALE + (ENDLESS_TITLE_KICK * rest * rest);
+            // 254, never 255: a fully opaque alpha selects the opaque blend
+            // mode, which ignores the alpha channel and would draw every
+            // glyph's transparent padding as a solid block. The logo above
+            // dodges this the same way.
+            wordAlpha = (s32) (254.0f * (1.0f - (rest * rest)));
+
+            // The texrect combiner multiplies the texel by the primitive
+            // colour, so this can only darken -- the cycle therefore runs from
+            // deep ember up to the font's own yellow, never past it.
+            pulse = gOptionBlinkTimer * 8;
+            if (pulse > 255) {
+                pulse = 511 - pulse;
+            }
+
+            // Shadow first, the same two-pass idiom the round intro uses. A
+            // zero primitive colour flattens the glyphs to a black silhouette.
+            texrect_draw_scaled(&sMenuCurrDisplayList, sEndlessTitleGlyphs, SCREEN_WIDTH_FLOAT_HALF + 3.0f,
+                                ENDLESS_TITLE_Y + 3.0f, wordScale, wordScale,
+                                COLOUR_RGBA32(0, 0, 0, wordAlpha >> 1), TEXRECT_POINT);
+            texrect_draw_scaled(&sMenuCurrDisplayList, sEndlessTitleGlyphs, SCREEN_WIDTH_FLOAT_HALF,
+                                ENDLESS_TITLE_Y, wordScale, wordScale,
+                                COLOUR_RGBA32(255, 156 + ((pulse * 99) >> 8), 40 + ((pulse * 215) >> 8),
+                                              wordAlpha),
+                                TEXRECT_POINT);
+
+            if (gTitleAudioCounter > ENDLESS_TITLE_PUNCH) {
+                lineAlpha = (s32) ((gTitleAudioCounter - ENDLESS_TITLE_PUNCH) * (255.0f / ENDLESS_TITLE_FADE));
+                if (lineAlpha > 255) {
+                    lineAlpha = 255;
+                }
+                set_text_background_colour(0, 0, 0, 0);
+                set_text_font(ASSET_FONTS_BIGFONT);
+                // Fourth argument is how much flat colour replaces the glyph
+                // texture: 255 for a solid black shadow, 0 to keep the font's
+                // own colours on the face.
+                set_text_colour(0, 0, 0, 255, lineAlpha >> 1);
+                draw_text(&sMenuCurrDisplayList, SCREEN_WIDTH_HALF + 1, ENDLESS_LINE_Y + 3, "TROPHY RACE",
+                          ALIGN_MIDDLE_CENTER);
+                set_text_colour(255, 255, 255, 0, lineAlpha);
+                draw_text(&sMenuCurrDisplayList, SCREEN_WIDTH_HALF, ENDLESS_LINE_Y, "TROPHY RACE",
+                          ALIGN_MIDDLE_CENTER);
+                // The options loop below sets its own font, but it is skipped
+                // when no controller is connected -- restore what the screen
+                // entered with so BIGFONT cannot leak out of this function.
+                set_text_font(ASSET_FONTS_FUNFONT);
+            }
+        }
+#endif
         if (!is_controller_missing()) {
             i = 0;
             posY = (osTvType == OS_TV_TYPE_PAL) ? SCREEN_HEIGHT - 22 : SCREEN_HEIGHT - 48;
@@ -3589,6 +3734,9 @@ void titlescreen_free(void) {
     music_voicelimit_set(16);
     cam_shake_on();
 #if REGION != REGION_JP
+    // ENDLESS: drop the borrowed glyph pointers BEFORE the font is freed, so
+    // nothing can draw through a stale texture header.
+    sEndlessTitleGlyphs[0].texture = NULL;
     unload_font(ASSET_FONTS_BIGFONT);
 #endif
     sound_volume_reset(TRUE);
