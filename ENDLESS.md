@@ -24,12 +24,27 @@ character select. **B** there backs out to ordinary Tracks racing.
 
 Every round draws a random track from a shuffle bag covering all 20 races
 across all five worlds, Future Fun Land included; each track appears once
-before any repeats. **The AI escalates every single round** — its behaviour
-table climbs from table 2 to the bank's maximum, one step per round, and past
-that the table itself is scaled: speed rises +0.125 "virtual bananas" per round
-(capped at +4.0, near human parity so skill still decides races) and
-boost/item/weapon aggression rises 2% per round. **Mirrored tracks** arrive as
-a coin flip from round 9, and every race from round 13.
+before any repeats. **The AI escalates every single round, without a ceiling.**
+Rounds 1-8 climb the game's own behaviour tables from 2 to the bank's maximum —
+eight hand-authored personalities. Past that, three things keep moving:
+
+- **Speed.** An AI's pace comes from a "virtual banana" count the engine clamps
+  at 20, twice the human cap of 10. The lead and tail AI are ramped separately
+  toward that clamp, the tail faster, so the field closes up rather than
+  stringing out into free positions.
+- **Grip.** Vanilla hands every AI the *weakest* acceleration curve in the game
+  while a human uses their own character's, which is why raising the banana
+  count alone could never make the AI genuinely fast. That curve is now scaled
+  up, compounding, every round. Terminal speed goes as its square root and
+  nothing clamps it, so this is the axis with no ceiling.
+- **Boosts.** The AI is stopped from throwing its boosts away (see below).
+
+Every round from the first moves the AI's top speed by at least 1.7%, and that
+floor holds for as long as a run lasts. It crosses a fully-bananaed Drumstick
+around round 8, is a third faster by round 19, and does not stop.
+
+**Mirrored tracks** arrive as a coin flip from round 9, and every race from
+round 13.
 
 A strong finish buys a **head start** in the next round: five bananas for a
 win, three for second, two for third. Bananas raise top speed and are lost on
@@ -93,8 +108,11 @@ to switch between **Gauntlet** and **Classic**. Both choices lock once the race
 starts, so the rules cannot change halfway through a run.
 
 - **Survival** — meet the round's required finish position or the run ends.
-  It tightens as you go: top 4 (rounds 1-3) → top 3 (4-6) → top 2 (7-9) →
-  **1st only** (10+).
+  It tightens as you go: top 4 (rounds 1-3) → top 3 (4-6) → top 2 (7-12) →
+  **1st only** (13+). That last step used to arrive at round 10, back when the
+  AI plateaued at round 8 and the placement rule had to supply the pressure by
+  itself. Now that the AI climbs for real, tightening that fast would stack two
+  escalations on top of each other.
 - **Season** — a finite, comparable score attack. **Ten races**, drawn from
   the shuffle bag, no track repeated. Nothing can eliminate you: a disastrous
   race costs points and nothing else, so two players who race the same seed
@@ -108,14 +126,12 @@ starts, so the rules cannot change halfway through a run.
   of what a seed decides and not merely the order — two seeds are now different
   seasons, not the same season shuffled.
 
-  A season escalates on a schedule sized to its own length. The endless ramp is
-  built for a run with no end and would barely start inside ten races: the AI
-  behaviour table climbs one step per race and the speed bonus does not reach
-  its cap until race 40. In a season the table spends races 1-8 climbing
-  through all eight personalities, mirrored tracks arrive as coin flips from
-  race 5 and every race from race 7, and the speed bonus is scaled to land
-  exactly on its cap on the final race. Change `ENDLESS_SEASON_RACES` and all
-  three schedules follow it.
+  A season escalates on a schedule sized to its own length. The endless ladder
+  climbs forever, so a season compresses it: race 10 lands on the rung an
+  endless run reaches at round 13, which is why a season finale bites well above
+  where its race number suggests. Mirrored tracks arrive as coin flips from race
+  5 and every race from race 7 on the same proportional basis. Change
+  `ENDLESS_SEASON_RACES` and every schedule follows it.
 - **Time Attack** — placement never ends the run. Instead every race is settled
   against a three-minute run clock, refunded as a share of that race's own
   duration: winning buys 30% back, fourth costs 10%, trailing costs 25%. The
@@ -290,12 +306,36 @@ These cost real time to find, so they are written down rather than rediscovered:
 - **FUNFONT has no slash glyph.** A missing glyph is skipped without advancing
   the pen, so `"7/20"` renders as `720` — silently, with no gap to hint at it.
   Every progress string in this mode spells out `" OF "` for that reason.
-- `endless_ai_level` pins the behaviour table to its maximum from round 8, and
-  that table's action chances are already 100, so `ENDLESS_CHANCE_PER_HEAT` is
-  clamped away at every round of every run and has never changed a value. The
-  speed bonus is the only escalation that actually does anything past round 8.
+- **AI racers are hardcoded to the game's weakest acceleration curve.**
+  `update_AI_racer` always loads `ASSET_MISC_RACERACCELERATION_UNKNOWN0` (tail
+  0.33) where a human loads their character's own (T.T. 0.43, Drumstick 0.41).
+  Terminal speed is `sqrt(425 * tail * (1 + 0.025 * bananas))`, so a weak base
+  cannot be rescued by bananas — this is why the AI felt slow no matter what
+  the behaviour table said.
+- **An AI's speed is its `unk124`, which the engine substitutes for its banana
+  count.** Giving an AI real bananas does nothing. It is clamped to 20 against
+  the human's 10, and `unk4` is the *leading* AI's value while `unk0` is the
+  *last-placed* one's, blended across the field by position — so `unk4` is the
+  lever that decides whether the player can win, and in a solo race the blend
+  never reaches `unk0`'s end at all.
+- The behaviour table's action percentages are already 100 across tables 7-9,
+  and `roll_percent_chance` is `rand_range(0, 99) < chance`, so 100 is a real
+  "always" with no headroom. A per-round chance bump is clamped away every
+  time.
+- **At 100, `AI_EMPOWERED_BOOST` makes the AI *worse*.** A boosting AI lifts off
+  the accelerator for the whole boost and coasts afterwards while its throttle
+  bleeds off, so the tables that always fire it are throwing the boost away.
 
 ## Fixed
+
+- **The AI stopped getting harder at round 8, and its ceiling was below a good
+  human.** Table 9 was reached at round 8 and never changed again; the only
+  thing left was a speed drip that needed round 40 to finish arriving. Even
+  fully maxed, that AI was ~8% *slower* than a Drumstick at full bananas — so
+  no endless run could ever become genuinely hard, and Survival leaned on its
+  placement schedule to create pressure instead. Fixed in v0.7.0. Depths set
+  before it were earned against an AI that stopped climbing and are not
+  comparable; erase Game Pak Times if you want a clean board.
 
 - Time Attack settled its clock **twice per race** from the silver coin bounty
   onwards: the bounty commit added a settle above the existing one without

@@ -24,10 +24,40 @@
 // Rounds are 0-based internally; shown to the player as round + 1.
 #define ENDLESS_AI_BASE_TABLE 2        // Behaviour table for round 1; +1 per round up to 9.
 #define ENDLESS_AI_TABLE_MAX 9         // Top of the AI behaviour table bank.
-#define ENDLESS_HEAT_START_ROUND 7     // Rounds past this scale the loaded table directly.
-#define ENDLESS_SPEED_PER_HEAT 0.125f  // Extra AI speed bonus (virtual bananas) per heat step.
-#define ENDLESS_SPEED_BONUS_CAP 4.0f   // Keep the AI near human banana parity so skill can still win.
-#define ENDLESS_CHANCE_PER_HEAT 2      // Extra AI action chance (percent) per heat step.
+// Escalation past the table bank. Three separate things were capping the AI
+// long before it got hard, and only the third has real headroom:
+//
+//   1. The table bank runs out at 9, reached at round 8. Rounds 1-8 still climb
+//      it -- that part is hand-authored and genuinely varied, so it stays.
+//   2. The action percentages are already 100 across tables 7-9, so the old
+//      per-round chance bump was clamped away every time and never once changed
+//      a value. Deleted rather than left looking load-bearing.
+//   3. An AI's speed comes from its "virtual banana" count, which the engine
+//      clamps to 20 -- twice the human cap of 10. That sounds generous until
+//      you notice the AI is also hardcoded to the WEAKEST acceleration curve in
+//      the game while a human uses their character's own. Multiplying a weak
+//      base by a big number still loses: even a fully clamped AI is slower than
+//      a ten-banana Drumstick. That is why the ceiling never felt like one.
+//
+// So the bananas are ramped to their clamp AND the AI is moved off the weak
+// curve. Terminal speed goes as the square root of the curve's tail and nothing
+// clamps it, which makes the curve the one axis that climbs without bound.
+#define ENDLESS_AI_RAMP_START_ROUND 6  // 0-based; the banana ramp bites from displayed round 8.
+#define ENDLESS_AI_LEAD_PER_ROUND 0.90f  // unk4 -- the leading AI, the one that decides a win.
+#define ENDLESS_AI_PACK_PER_ROUND 1.20f  // unk0 -- the tail; faster, so the field closes up.
+#define ENDLESS_AI_LEAD_CAP 21.36f       // Puts the lead AI exactly on the engine's +/-20 clamp.
+#define ENDLESS_AI_PACK_CAP 20.34f       // Same for the tail, which carries the racing-line bonus.
+#define ENDLESS_AI_PACK_GAP 0.50f        // The tail never catches the lead; keeps some field spread.
+// Compounding, not linear: speed goes as sqrt(gain), so a linear gain would
+// shrink every round's step forever (+1.2% at round 21 decaying to +0.2% by
+// round 200). Compounding holds a constant ~1.7% per round for as long as the
+// run lasts, which is what "climbs without bound" has to mean to be felt.
+#define ENDLESS_AI_GRIP_PER_ROUND 0.035f
+// Not a difficulty ceiling -- the AI is unbeatable decades before here. It
+// stops the compounding running away into the engine's velocity clamp of 50,
+// where the physics would stop behaving like racing.
+#define ENDLESS_AI_GRIP_MAX_ROUNDS 60
+#define ENDLESS_SEASON_LADDER_TOP 12   // Ladder round a season's finale lands on.
 #define ENDLESS_MIRROR_CHANCE_ROUND 8  // Rounds with a coin-flip mirror.
 #define ENDLESS_MIRROR_ALWAYS_ROUND 12 // Every race mirrored from here on.
 
@@ -403,18 +433,64 @@ static s32 endless_season_length(void) {
 }
 
 /**
- * A season escalates on a schedule sized to its own length rather than the
- * endless one, so its final race lands exactly on the speed cap whatever
- * ENDLESS_SEASON_RACES is set to. Without this a ten-race season would finish
- * at a sixth of the intended difficulty, and a twenty-race one at a third.
+ * Which rung of the difficulty ladder this race sits on. Endless climbs it one
+ * rung per round forever; a season compresses the whole ladder into its own
+ * length so a ten-race season still passes through the same arc and finishes
+ * on ENDLESS_SEASON_LADDER_TOP. Same idiom as the mirror schedule.
  */
-static f32 endless_season_speed_per_heat(void) {
-    s32 finalHeat = (endless_season_length() - 1) - ENDLESS_HEAT_START_ROUND;
+static s32 endless_ai_ladder_round(void) {
+    s32 length;
 
-    if (finalHeat <= 0) {
-        return ENDLESS_SPEED_PER_HEAT;
+    if (gEndlessMode == ENDLESS_MODE_SEASON) {
+        length = endless_season_length();
+        if (length <= 1) {
+            return 0;
+        }
+        return (gEndlessRound * ENDLESS_SEASON_LADDER_TOP) / (length - 1);
     }
-    return ENDLESS_SPEED_BONUS_CAP / finalHeat;
+    return gEndlessRound;
+}
+
+/**
+ * The AI's acceleration curve, scaled up as the run climbs.
+ *
+ * Vanilla hands every AI racer ASSET_MISC_RACERACCELERATION_UNKNOWN0 -- tail
+ * 0.33, the weakest curve in the game -- while a human racer loads their own
+ * character's (T.T. 0.43, Drumstick 0.41). Terminal speed is proportional to
+ * the square root of the tail and nothing clamps it, unlike the banana count,
+ * so this is the only axis that can escalate indefinitely.
+ *
+ * Gain 1.0 reproduces the vanilla asset byte for byte, so round 1 is untouched.
+ * The result is memoised on the gain rather than the round, because this is
+ * called from the per-frame racer update.
+ */
+static const f32 sEndlessAiAccelBase[16] = {
+    0.10f, 0.12f, 0.15f, 0.17f, 0.19f, 0.21f, 0.25f, 0.28f,
+    0.32f, 0.33f, 0.33f, 0.33f, 0.33f, 0.33f, 0.33f, 0.00f,
+};
+static f32 sEndlessAiAccel[16];
+static f32 sEndlessAiAccelGain = 0.0f;
+
+f32 *endless_ai_accel_curve(void) {
+    s32 n = endless_ai_ladder_round();
+    f32 gain = 1.0f;
+    s32 i;
+
+    if (n > ENDLESS_AI_GRIP_MAX_ROUNDS) {
+        n = ENDLESS_AI_GRIP_MAX_ROUNDS;
+    }
+    for (i = 0; i < n; i++) {
+        gain *= 1.0f + ENDLESS_AI_GRIP_PER_ROUND;
+    }
+    if (gain != sEndlessAiAccelGain) {
+        for (i = 0; i < 15; i++) {
+            sEndlessAiAccel[i] = sEndlessAiAccelBase[i] * gain;
+        }
+        // The final entry terminates the curve; scaling it would change shape.
+        sEndlessAiAccel[15] = 0.0f;
+        sEndlessAiAccelGain = gain;
+    }
+    return sEndlessAiAccel;
 }
 
 /**
@@ -578,10 +654,14 @@ s32 endless_current_world(void) {
 
 /**
  * Worst allowed finishing position (0-based) for the current round.
- * Top 4 early, tightening to 1st place only from round 10 on.
+ * Top 4 early, tightening to 1st place only from round 13 on.
+ *
+ * That used to be round 10. The schedule was doing the escalation's job while
+ * the AI plateaued at round 8; now that the AI actually climbs, tightening this
+ * fast would stack two difficulty curves on top of each other.
  */
 s32 endless_required_position(void) {
-    if (gEndlessRound >= 9) {
+    if (gEndlessRound >= 12) {
         return 0;
     }
     if (gEndlessRound >= 6) {
@@ -1134,7 +1214,7 @@ s32 endless_position_is_safe(s32 racePosition) {
  * endless_scale_ai_table.
  */
 s32 endless_ai_level(UNUSED s32 baseLevel) {
-    s32 level = ENDLESS_AI_BASE_TABLE + gEndlessRound;
+    s32 level = ENDLESS_AI_BASE_TABLE + endless_ai_ladder_round();
 
     if (level > ENDLESS_AI_TABLE_MAX) {
         level = ENDLESS_AI_TABLE_MAX;
@@ -1147,35 +1227,39 @@ s32 endless_ai_level(UNUSED s32 baseLevel) {
  * position-interpolated speed bonus and action chances up with each round.
  */
 void endless_scale_ai_table(AIBehaviourTable *table) {
-    s32 heat = gEndlessRound - ENDLESS_HEAT_START_ROUND;
-    // A season is over before the endless schedule has spent much of its range,
-    // so it escalates faster: its last race lands on the cap rather than at 37%.
-    f32 perHeat =
-        (gEndlessMode == ENDLESS_MODE_SEASON) ? endless_season_speed_per_heat() : ENDLESS_SPEED_PER_HEAT;
-    f32 bonus;
-    s32 value;
+    s32 n = endless_ai_ladder_round() - ENDLESS_AI_RAMP_START_ROUND;
+    f32 lead;
+    f32 pack;
     s32 i;
 
-    if (heat <= 0) {
+    if (n <= 0) {
         return;
     }
-    bonus = heat * perHeat;
-    if (bonus > ENDLESS_SPEED_BONUS_CAP) {
-        bonus = ENDLESS_SPEED_BONUS_CAP;
+    // unk4 is the leading AI's speed and unk0 the last-placed one's, blended
+    // across the field by position. The tail climbs faster on purpose: an equal
+    // bonus would leave backmarkers as free positions while only the leader
+    // mattered, and in a solo race the blend never reaches unk0's end anyway.
+    lead = table->unk4 + ((f32) n * ENDLESS_AI_LEAD_PER_ROUND);
+    pack = table->unk0 + ((f32) n * ENDLESS_AI_PACK_PER_ROUND);
+    if (lead > ENDLESS_AI_LEAD_CAP) {
+        lead = ENDLESS_AI_LEAD_CAP;
     }
-    table->unk0 += bonus;
-    table->unk4 += bonus;
+    if (pack > ENDLESS_AI_PACK_CAP) {
+        pack = ENDLESS_AI_PACK_CAP;
+    }
+    if (pack > lead - ENDLESS_AI_PACK_GAP) {
+        pack = lead - ENDLESS_AI_PACK_GAP;
+    }
+    table->unk4 = lead;
+    table->unk0 = pack;
+
+    // Stop the AI throwing its boosts away. At 100 -- which every table from 7
+    // up sets -- a boosting AI lifts off the accelerator for the whole boost
+    // and coasts afterwards while its throttle bleeds off. All four slots are
+    // cleared, not just the two the old code touched: the step slots would
+    // otherwise walk it straight back up mid-race.
     for (i = 0; i < 4; i++) {
-        value = table->percentages[i][AI_MIN] + (heat * ENDLESS_CHANCE_PER_HEAT);
-        if (value > 100) {
-            value = 100;
-        }
-        table->percentages[i][AI_MIN] = value;
-        value = table->percentages[i][AI_MAX] + (heat * ENDLESS_CHANCE_PER_HEAT);
-        if (value > 100) {
-            value = 100;
-        }
-        table->percentages[i][AI_MAX] = value;
+        table->percentages[AI_EMPOWERED_BOOST][i] = 0;
     }
 }
 

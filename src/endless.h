@@ -72,6 +72,7 @@ s32 endless_run_failed(void);
 void endless_round_finished(s32 roundPoints);
 s32 endless_ai_level(s32 baseLevel);
 void endless_scale_ai_table(AIBehaviourTable *table);
+f32 *endless_ai_accel_curve(void);
 s32 endless_score(void);
 s32 endless_best_rounds(void);
 EndlessRecords *endless_records_pointer(void);

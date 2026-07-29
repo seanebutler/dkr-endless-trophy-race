@@ -11,6 +11,7 @@
 #include "audiosfx.h"
 #include "collision.h"
 #include "common.h"
+#include "endless.h"
 #include "fade_transition.h"
 #include "game.h"
 #include "game_ui.h"
@@ -8774,6 +8775,13 @@ void update_AI_racer(Object *obj, Object_Racer *racer, s32 updateRate, f32 updat
         }
         gCurrentRacerHandlingStat = 1;
         gCurrentRacerMiscAssetPtr = (f32 *) get_misc_asset(ASSET_MISC_RACERACCELERATION_UNKNOWN0);
+        // ENDLESS: AI racers are hardcoded to the game's weakest acceleration
+        // curve while humans load their own character's, which is why raising
+        // the AI's banana count alone could never make it genuinely fast. This
+        // is the unbounded difficulty axis. Human racers never reach this line.
+        if (endless_is_active() && get_game_mode() != GAMEMODE_MENU) {
+            gCurrentRacerMiscAssetPtr = endless_ai_accel_curve();
+        }
         D_8011D568 = (f32 *) get_misc_asset(obj->header->unk5D);
         if ((obj->y_velocity < 4.0) && ((racer->groundedWheels >= 3) || (racer->buoyancy != 0.0))) {
             racer->unk1F1 = 0;
