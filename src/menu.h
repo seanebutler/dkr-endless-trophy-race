@@ -37,6 +37,10 @@ enum PauseMenuResults {
     PAUSE_OPT_6,
     PAUSE_QUIT_CHALLENGE,
     PAUSE_QUIT_CHARSELECT = 12,
+    // ENDLESS: quitting a run mid-race. Distinct from PAUSE_QUIT_CHARSELECT
+    // because that one arrives flagged "from a race", where confirming returns
+    // to the track grid; a quit run wants confirm to open a fresh run.
+    PAUSE_QUIT_ENDLESS,
 };
 
 enum PostRaceCases {

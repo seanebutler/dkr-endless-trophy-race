@@ -197,8 +197,11 @@ versions are migrated in automatically the first time this build runs.
 The game-over screen is a run receipt with the seed and rules, cleared rounds,
 full score, final placement, remaining Time Attack clock, and a new-best flag.
 From there, **Retry Seed** reopens round one with the same seed and rules,
-**New Seed** starts a guaranteed-different one, and **Quit** returns to track
-select. The reopened setup can still be edited before pressing A.
+**New Seed** starts a guaranteed-different one, and **Quit** returns to
+character select — leaving a run nearly always means "again, differently", and
+confirming there opens a fresh run setup. Quitting from the **pause menu**
+mid-race lands in the same place. The reopened setup can still be edited before
+pressing A.
 
 Every run has a four-digit **seed** that fully determines its track order,
 mirror rolls, and event rules when events are enabled, so a run can be handed

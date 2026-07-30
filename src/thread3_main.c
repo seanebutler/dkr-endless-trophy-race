@@ -553,6 +553,11 @@ void mode_game(s32 updateRate) {
                 reset_delayed_text();
                 buttonHeldInputs |= L_TRIG;
                 break;
+            case PAUSE_QUIT_ENDLESS:
+                loadContext = LEVEL_CONTEXT_ENDLESS_CHARSELECT;
+                reset_delayed_text();
+                buttonHeldInputs |= L_TRIG;
+                break;
             case PAUSE_OPT_6:
                 gIsPaused = FALSE;
                 break;
@@ -708,6 +713,20 @@ void mode_game(s32 updateRate) {
                         i ^= 3;
                     }
                     charselect_prev(1, 0);
+                    load_menu_with_level_background(MENU_CHARACTER_SELECT, ASSET_LEVEL_CHARACTERSELECT, i);
+                    break;
+                case LEVEL_CONTEXT_ENDLESS_CHARSELECT:
+                    // ENDLESS: same screen, arriving "from nowhere" -- context 0
+                    // rather than 1 -- so confirming opens a fresh run setup
+                    // instead of bouncing back to the track grid.
+                    i = 0;
+                    if (is_drumstick_unlocked()) {
+                        i ^= 1;
+                    }
+                    if (is_tt_unlocked()) {
+                        i ^= 3;
+                    }
+                    charselect_prev(0, 0);
                     load_menu_with_level_background(MENU_CHARACTER_SELECT, ASSET_LEVEL_CHARACTERSELECT, i);
                     break;
                 case LEVEL_CONTEXT_UNK7:

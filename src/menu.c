@@ -10529,10 +10529,19 @@ s32 menu_pause_loop(UNUSED Gfx **dl, s32 updateRate) {
             menu_dialogue_end();
             if (gMenuSubOption == 1) {
                 if (gTrophyRaceWorldId != 0) {
+                    // ENDLESS: quitting mid-run lands on character select like
+                    // the receipt's QUIT does -- leaving a run nearly always
+                    // means "again, differently". Decided before endless_stop,
+                    // which erases the fact this was an endless race.
+                    s32 wasEndless = endless_is_active();
+
                     gTrophyRaceWorldId = 0;
                     endless_stop();
                     if (gIsInTracksMode == FALSE) {
                         return PAUSE_QUIT_LOBBY;
+                    }
+                    if (wasEndless) {
+                        return PAUSE_QUIT_ENDLESS;
                     }
                     return PAUSE_QUIT_TRACKS;
                 }
