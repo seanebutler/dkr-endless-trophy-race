@@ -59,6 +59,8 @@ s32 endless_season(void);
 void endless_cycle_mode(void);
 s32 endless_events_enabled(void);
 void endless_toggle_events(void);
+s32 endless_mirror_enabled(void);
+void endless_toggle_mirror(void);
 s32 endless_event_active(void);
 s32 endless_event_cheats(void);
 s32 endless_bounty_active(void);

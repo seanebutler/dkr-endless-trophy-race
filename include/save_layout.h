@@ -229,21 +229,26 @@ typedef struct SaveBuffer {
 // touch the region -- its checksum self-heal would otherwise "repair" this
 // block back into a blank adventure save.
 //
-// Categories are indexed timeAttack * 2 + gauntlet; slots 4-7 are reserved
-// for a future rules dimension. Scores returned home in this layout: the
-// settings word only had room for depths, which is why v0.3 kept the score
-// on the game-over receipt alone.
+// Categories are indexed mode * 4 + gauntlet * 2 + mirror, where mode is
+// Survival, Time Attack or Season. Twelve of them, because all three axes
+// change how hard a run is and a record is only meaningful against runs played
+// under the same rules.
+//
+// Twelve fits the same 40 bytes exactly: the twelve rounds and twelve scores
+// consume the spare[12] that version 1 carried purely as padding, so widening
+// the board costs no EEPROM at all. That spare was never independently usable
+// anyway -- it sat inside this block's checksum and across a block boundary.
 typedef struct EndlessRecords {
     u16 checksum; // Byte sum of everything after it; erased 0xFF fails it.
     u8 version;   // ENDLESS_RECORDS_VERSION when valid.
     u8 pad;
-    u8 rounds[8];  // Best cleared depth per rules category, capped 255.
-    u16 scores[8]; // Best score within that depth, capped 65535.
-    u8 spare[12];  // Still-unused space from the reclaimed slot.
-} EndlessRecords; // 40 bytes: exactly the retired save slot A.
+    u8 rounds[12];  // Best cleared depth per category, capped 255.
+    u16 scores[12]; // Best score within that depth, capped 65535.
+} EndlessRecords;   // 40 bytes: exactly the retired save slot A.
 
-#define ENDLESS_RECORDS_VERSION 1
-#define ENDLESS_RECORDS_CATEGORIES 8
+#define ENDLESS_RECORDS_VERSION 2
+#define ENDLESS_RECORDS_VERSION_V1 1 // Eight categories, no mirror axis.
+#define ENDLESS_RECORDS_CATEGORIES 12
 
 // Eeprom works in 8 byte blocks, so divide by 8 for those functions.
 #define BLOCK_SIZE(x)           (x / sizeof(u64))

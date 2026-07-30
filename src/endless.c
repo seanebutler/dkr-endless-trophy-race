@@ -171,6 +171,7 @@ s32 gEndlessMirrorThisRace = FALSE;
 s32 gEndlessPerkBananas = 0;
 s32 gEndlessMode = ENDLESS_MODE_SURVIVAL; // Kept between runs: it is a preference.
 s32 gEndlessEventsEnabled = TRUE; // Also a preference; OFF is classic v0.2 play.
+s32 gEndlessMirrorEnabled = TRUE; // Preference too; ON is how every run played before v0.7.2.
 s32 gEndlessClock = 0;
 s32 gEndlessSeed = 0;
 
@@ -191,7 +192,7 @@ static char sEndlessPerkText[32];
 static char sEndlessClockText[24];
 static char sEndlessSeasonText[24];
 static char sEndlessSpeedText[16];
-static char sEndlessModeText[40];
+static char sEndlessModeText[56];
 static char sEndlessResultText[40];
 static char sEndlessResultDetailText[40];
 static char sEndlessSeedPrefix[40];
@@ -641,6 +642,14 @@ s32 endless_pick_track(void) {
     } else {
         gEndlessMirrorThisRace = FALSE;
     }
+    // The coin flip above is rolled and then discarded when mirroring is off,
+    // rather than skipped. Skipping it would leave the track RNG one draw
+    // ahead, so the same seed would deal a different course order with
+    // mirroring disabled -- and comparing a seed across the setting is the
+    // whole reason someone turns it off.
+    if (!gEndlessMirrorEnabled) {
+        gEndlessMirrorThisRace = FALSE;
+    }
     return gEndlessTrackId;
 }
 
@@ -910,6 +919,14 @@ s32 endless_events_enabled(void) {
     return gEndlessEventsEnabled;
 }
 
+s32 endless_mirror_enabled(void) {
+    return gEndlessMirrorEnabled;
+}
+
+void endless_toggle_mirror(void) {
+    gEndlessMirrorEnabled = !gEndlessMirrorEnabled;
+}
+
 void endless_toggle_events(void) {
     gEndlessEventsEnabled = !gEndlessEventsEnabled;
 }
@@ -1113,13 +1130,19 @@ char *endless_mode_text(void) {
     if (gEndlessMode == ENDLESS_MODE_SEASON) {
         end = endless_append_string(sEndlessModeText, "SEASON  ");
     } else if (gEndlessMode == ENDLESS_MODE_TIME_ATTACK) {
-        end = endless_append_string(sEndlessModeText, "TIME ATTACK  ");
+        end = endless_append_string(sEndlessModeText, "TIME ATK  ");
     } else {
         end = endless_append_string(sEndlessModeText, "SURVIVAL  ");
     }
     // Naming both states beats "EVENTS ON/OFF": the switch now decides vehicles
     // as well as event rounds, and it is shorter than spelling either out.
-    end = endless_append_string(end, gEndlessEventsEnabled ? "GAUNTLET  SEED " : "CLASSIC  SEED ");
+    end = endless_append_string(end, gEndlessEventsEnabled ? "GAUNTLET  " : "CLASSIC  ");
+    // Listed as a property of the run when it is on and simply absent when it
+    // is off, which keeps the line inside the screen in the worst case.
+    if (gEndlessMirrorEnabled) {
+        end = endless_append_string(end, "FLIP  ");
+    }
+    end = endless_append_string(end, "SEED ");
     // Leading zeroes are kept so the digits never shift under the cursor.
     for (i = 0; i < ENDLESS_SEED_DIGITS; i++) {
         digit = (gEndlessSeed / endless_digit_place(i)) % 10;
@@ -1297,9 +1320,12 @@ char *endless_score_text(void) {
  * the slots 4 and 5 that the block reserved.
  */
 static s32 endless_record_category(void) {
-    s32 category = gEndlessMode * 2;
+    s32 category = gEndlessMode * 4;
 
     if (gEndlessEventsEnabled) {
+        category += 2;
+    }
+    if (gEndlessMirrorEnabled) {
         category++;
     }
     return category;

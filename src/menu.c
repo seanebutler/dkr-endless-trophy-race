@@ -12321,7 +12321,7 @@ void trophyround_render(UNUSED s32 updateRate) {
             // The controls sit apart from the run details, below the line they
             // act on, so they read as a footnote rather than another fact.
             set_text_colour(176, 176, 176, 96, 255);
-            draw_text(&sMenuCurrDisplayList, SCREEN_WIDTH_HALF, yPos + 176, "Z:MODE  C-DOWN:GAUNTLET  STICK:SEED",
+            draw_text(&sMenuCurrDisplayList, SCREEN_WIDTH_HALF, yPos + 176, "Z:MODE  C-DOWN:RULES  C-UP:FLIP",
                       ALIGN_MIDDLE_CENTER);
             set_text_colour(255, 255, 255, 0, 255);
         } else {
@@ -12397,6 +12397,13 @@ s32 menu_trophy_race_round_loop(s32 updateRate) {
             }
             if ((gMenuButtons[PLAYER_MENU] & D_CBUTTONS) != 0) {
                 endless_toggle_events();
+                sound_play(SOUND_MENU_PICK2, NULL);
+            }
+            // ENDLESS: mirrored tracks are a real taste difference rather than
+            // just difficulty, so they are optional. Turning them off is its
+            // own record category, not an easier route into the same one.
+            if ((gMenuButtons[PLAYER_MENU] & U_CBUTTONS) != 0) {
+                endless_toggle_mirror();
                 sound_play(SOUND_MENU_PICK2, NULL);
             }
             if (gMenuStickX[PLAYER_MENU] != 0) {

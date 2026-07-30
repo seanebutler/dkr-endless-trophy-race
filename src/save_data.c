@@ -1160,6 +1160,8 @@ static u16 calculate_endless_records_checksum(EndlessRecords *records) {
  * block -- fresh EEPROM, or pre-retirement adventure data -- is zeroed with
  * version 0, which endless.c treats as "never written" and migrates into.
  */
+static void endless_records_upgrade_v1(EndlessRecords *records);
+
 s32 read_endless_records(EndlessRecords *records) {
     u8 *bytes = (u8 *) records;
     s32 block;
@@ -1172,13 +1174,55 @@ s32 read_endless_records(EndlessRecords *records) {
     for (block = 0; block < (s32) BLOCK_SIZE(sizeof(EndlessRecords)); block++) {
         osEepromRead(si_mesg(), BLOCK_SIZE(ENDLESS_RECORDS_START) + block, bytes + (block * sizeof(u64)));
     }
-    if (records->version != ENDLESS_RECORDS_VERSION ||
-        records->checksum != calculate_endless_records_checksum(records)) {
+    if (records->checksum != calculate_endless_records_checksum(records)) {
+        // Never written, erased, or corrupt.
+        for (i = 0; i < (s32) sizeof(EndlessRecords); i++) {
+            bytes[i] = 0;
+        }
+    } else if (records->version == ENDLESS_RECORDS_VERSION_V1) {
+        endless_records_upgrade_v1(records);
+    } else if (records->version != ENDLESS_RECORDS_VERSION) {
         for (i = 0; i < (s32) sizeof(EndlessRecords); i++) {
             bytes[i] = 0;
         }
     }
     return 1;
+}
+
+/**
+ * ENDLESS: carry a version 1 board into the twelve-category layout.
+ *
+ * Version 1 indexed by mode * 2 + gauntlet and had no mirror axis, because
+ * mirroring could not be turned off. Every run it holds was therefore played
+ * mirrored, which is the new index's low bit.
+ *
+ * The two layouts overlap in memory -- version 1's scores began at byte 12 and
+ * version 2's rounds now run to byte 15 -- so the old values are lifted out
+ * through raw offsets before anything is written back. u16 is read high byte
+ * first, matching how the struct was stored.
+ */
+static void endless_records_upgrade_v1(EndlessRecords *records) {
+    u8 *bytes = (u8 *) records;
+    u8 oldRounds[8];
+    u16 oldScores[8];
+    s32 i;
+    s32 dst;
+
+    for (i = 0; i < 8; i++) {
+        oldRounds[i] = bytes[4 + i];
+        oldScores[i] = (u16) ((bytes[12 + (i * 2)] << 8) | bytes[13 + (i * 2)]);
+    }
+    for (i = 0; i < (s32) sizeof(EndlessRecords); i++) {
+        bytes[i] = 0;
+    }
+    records->version = ENDLESS_RECORDS_VERSION;
+    // Only the first six version 1 slots were ever populated: three modes by
+    // two rules settings.
+    for (i = 0; i < 6; i++) {
+        dst = ((i / 2) * 4) + ((i % 2) * 2) + 1;
+        records->rounds[dst] = oldRounds[i];
+        records->scores[dst] = oldScores[i];
+    }
 }
 
 /**

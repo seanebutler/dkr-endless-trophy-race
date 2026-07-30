@@ -110,8 +110,17 @@ Speed is solo only — the split-screen viewports have no room to spare.
 ### Three modes
 
 Press **Z** on the first round's intro to cycle modes. Press **C-Down** there
-to switch between **Gauntlet** and **Classic**. Both choices lock once the race
-starts, so the rules cannot change halfway through a run.
+to switch between **Gauntlet** and **Classic**, and **C-Up** to turn mirrored
+tracks on or off. All three lock once the race starts, so the rules cannot
+change halfway through a run.
+
+Mirroring is on by default and shows as **FLIP** on the setup line; turning it
+off simply removes the word. It is a genuine matter of taste rather than only
+difficulty — some people would rather learn twenty courses than forty — so it
+is a real setting with its own records, not an easier route into someone else's
+board. Turning it off does **not** change which tracks a seed deals: the mirror
+coin flip is still rolled and then discarded, so the course order is identical
+either way and a seed stays comparable across the setting.
 
 - **Survival** — meet the round's required finish position or the run ends.
   It tightens as you go: top 4 (rounds 1-3) → top 3 (4-6) → top 2 (7-12) →
@@ -161,8 +170,9 @@ saved records meaningless.
 ### Records and seeds
 
 Points accumulate all run using the trophy scoring table (9/7/5/3/1). For solo
-runs, the game saves a best depth **and score** for each of the six rules
-categories: Survival, Time Attack or Season, each in Gauntlet or Classic.
+runs, the game saves a best depth **and score** for each of the twelve rules
+categories: Survival, Time Attack or Season, each in Gauntlet or Classic, each
+with mirroring on or off.
 Deeper always wins; score breaks ties between equally deep runs.
 
 That comparator needs no special case for a season: every completed season ties
@@ -284,6 +294,12 @@ These cost real time to find, so they are written down rather than rediscovered:
   `Racer.lap_times` (a `u16[3]`) in the end-of-race copy in `objects.c`, which
   corrupts the adjacent racer's `trophy_points` — the very field this mode uses
   for scoring.
+- Twelve record categories fit the same 40-byte block that eight did: the
+  twelve depths and twelve scores consume exactly the `spare[12]` that version 1
+  carried as padding. Widening the board cost no EEPROM at all, and that spare
+  was never independently usable anyway since it sat inside this block's
+  checksum. Version 1 boards are migrated rather than wiped — every run they
+  hold was played mirrored, which is the new index's low bit.
 - **The free EEPROM is 80 bytes, not 92, and both its offset and its size are
   load-bearing.** Retiring adventure freed 120 bytes; the records block took 40
   of them. The remaining 80 (byte offsets 40-119, blocks 5-14) are contiguous
