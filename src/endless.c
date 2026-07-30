@@ -191,6 +191,7 @@ static char sEndlessBestText[32];
 static char sEndlessPerkText[32];
 static char sEndlessClockText[24];
 static char sEndlessSeasonText[24];
+static char sEndlessSeedText[16];
 static char sEndlessSpeedText[16];
 static char sEndlessModeText[56];
 static char sEndlessResultText[40];
@@ -1118,49 +1119,59 @@ char *endless_clock_text(void) {
 }
 
 /**
- * Mode, event rules and seed share a line on the first round's intro. Keeping
- * all three together makes the complete run category visible without adding a
- * row to an already full screen.
+ * The run's rules on one line: what ends it, whether the gauntlet is on, and
+ * whether tracks mirror. The seed used to share this line, which is what forced
+ * every word to be abbreviated -- spelled out with the seed present, the
+ * worst combination measured 319px against a 320px screen. The seed now has its
+ * own row directly below, which also makes the cursor arithmetic trivial.
  */
 char *endless_mode_text(void) {
     char *end;
-    s32 digit;
-    s32 i;
 
     if (gEndlessMode == ENDLESS_MODE_SEASON) {
-        end = endless_append_string(sEndlessModeText, "SEASON  ");
+        end = endless_append_string(sEndlessModeText, "SEASON   ");
     } else if (gEndlessMode == ENDLESS_MODE_TIME_ATTACK) {
-        end = endless_append_string(sEndlessModeText, "TIME ATK  ");
+        end = endless_append_string(sEndlessModeText, "TIME ATTACK   ");
     } else {
-        end = endless_append_string(sEndlessModeText, "SURVIVAL  ");
+        end = endless_append_string(sEndlessModeText, "SURVIVAL   ");
     }
     // Naming both states beats "EVENTS ON/OFF": the switch now decides vehicles
     // as well as event rounds, and it is shorter than spelling either out.
-    end = endless_append_string(end, gEndlessEventsEnabled ? "GAUNTLET  " : "CLASSIC  ");
-    // Listed as a property of the run when it is on and simply absent when it
-    // is off, which keeps the line inside the screen in the worst case.
+    end = endless_append_string(end, gEndlessEventsEnabled ? "GAUNTLET" : "CLASSIC");
+    // Named as a property of the run when on and simply absent when off, the
+    // same way the vehicle is only named when the gauntlet chose it.
     if (gEndlessMirrorEnabled) {
-        end = endless_append_string(end, "FLIP  ");
+        endless_append_string(end, "   MIRRORED");
     }
-    end = endless_append_string(end, "SEED ");
-    // Leading zeroes are kept so the digits never shift under the cursor.
+    return sEndlessModeText;
+}
+
+/**
+ * The seed on its own row. Leading zeroes are kept so the digits never shift
+ * under the cursor.
+ */
+char *endless_seed_text(void) {
+    char *end = endless_append_string(sEndlessSeedText, "SEED ");
+    s32 digit;
+    s32 i;
+
     for (i = 0; i < ENDLESS_SEED_DIGITS; i++) {
         digit = (gEndlessSeed / endless_digit_place(i)) % 10;
         *end++ = (char) ('0' + digit);
     }
     *end = '\0';
-    return sEndlessModeText;
+    return sEndlessSeedText;
 }
 
 /**
- * The mode line truncated just before the digit being edited, and that digit on
+ * The seed row truncated just before the digit being edited, and that digit on
  * its own. Measuring these two gives the digit's position within the centred
- * line, which is how the cursor gets drawn: there is no glyph for it, because
+ * row, which is how the cursor gets drawn: there is no glyph for it, because
  * the only bracket-like characters in this font live on a page that is not
  * loaded here and come out blank.
  */
 char *endless_seed_prefix_text(void) {
-    char *full = endless_mode_text();
+    char *full = endless_seed_text();
     s32 length = 0;
     s32 i;
 

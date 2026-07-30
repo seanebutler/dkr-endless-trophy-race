@@ -12305,12 +12305,16 @@ void trophyround_render(UNUSED s32 updateRate) {
         // afterwards only what changed since the last race. Rows are spaced 24
         // apart so the block reads as three separate facts rather than a wall.
         if (endless_round() == 0) {
-            s32 lineWidth = get_text_width(endless_mode_text(), 0, 0);
+            s32 lineWidth = get_text_width(endless_seed_text(), 0, 0);
             s32 prefixWidth = get_text_width(endless_seed_prefix_text(), 0, 0);
             s32 digitWidth = get_text_width(endless_seed_digit_text(), 0, 0);
 
-            draw_text(&sMenuCurrDisplayList, SCREEN_WIDTH_HALF, yPos + 104, endless_mode_text(), ALIGN_MIDDLE_CENTER);
-            // Redraw the digit under the cursor in yellow. The line is centred,
+            // The rules take the gap under the title and the seed keeps the row
+            // they used to share, so nothing below this moves. Splitting them is
+            // what lets both be spelled out: together they overran the screen.
+            draw_text(&sMenuCurrDisplayList, SCREEN_WIDTH_HALF, yPos + 80, endless_mode_text(), ALIGN_MIDDLE_CENTER);
+            draw_text(&sMenuCurrDisplayList, SCREEN_WIDTH_HALF, yPos + 104, endless_seed_text(), ALIGN_MIDDLE_CENTER);
+            // Redraw the digit under the cursor in yellow. The row is centred,
             // so its left edge plus the width of everything before the digit is
             // where that digit starts.
             set_text_colour(255, 224, 64, 200, 255);
@@ -12321,7 +12325,7 @@ void trophyround_render(UNUSED s32 updateRate) {
             // The controls sit apart from the run details, below the line they
             // act on, so they read as a footnote rather than another fact.
             set_text_colour(176, 176, 176, 96, 255);
-            draw_text(&sMenuCurrDisplayList, SCREEN_WIDTH_HALF, yPos + 176, "Z:MODE  C-DOWN:RULES  C-UP:FLIP",
+            draw_text(&sMenuCurrDisplayList, SCREEN_WIDTH_HALF, yPos + 176, "Z:MODE  C-DOWN:RULES  C-UP:MIRROR",
                       ALIGN_MIDDLE_CENTER);
             set_text_colour(255, 255, 255, 0, 255);
         } else {
@@ -12706,6 +12710,9 @@ static void endless_rankings_render_receipt(s32 highlight) {
     endless_receipt_draw_line(88, endless_result_text(), 255, 255, 255);
     endless_receipt_draw_line(104, endless_result_detail_text(), 255, 255, 255);
     endless_receipt_draw_line(128, endless_new_best() ? "NEW BEST" : endless_best_text(), 255, 224, 96);
+    // The seed is the half of a result someone else can act on, so it stays on
+    // the receipt now that it no longer rides along with the rules.
+    endless_receipt_draw_line(144, endless_seed_text(), 255, 255, 255);
 
     optionY = 168;
     for (i = 0; i < gResultOptionCount; i++) {
