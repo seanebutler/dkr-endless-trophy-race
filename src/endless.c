@@ -73,6 +73,14 @@
 // long ones a death sentence. Winning buys time, trailing bleeds it.
 #define ENDLESS_TA_START_SECONDS 180
 #define ENDLESS_TICKS_PER_SECOND 60
+// Every race charges the run clock this share of its own duration, and placement
+// refunds against that charge. Without the charge the refunds were pure income:
+// first and second grew the clock, third left it alone, and a run could not end
+// for anyone who kept podiuming -- a clock that started at 3:00 was routinely
+// past 5:00 by round four. Set so that winning is the break-even-plus-a-little
+// finish, which is what makes early wins bank time for the rounds where the AI
+// has outgrown you.
+#define ENDLESS_TA_PCT_COST 25
 #define ENDLESS_TA_PCT_FIRST 30
 #define ENDLESS_TA_PCT_SECOND 10
 #define ENDLESS_TA_PCT_THIRD 0
@@ -1031,7 +1039,9 @@ static void endless_settle_clock(void) {
             percent = ENDLESS_TA_PCT_REST;
             break;
     }
-    gEndlessClock += (raceTime * percent) / 100;
+    // Charge the race, then refund by placement. A win nets +5% of the race's
+    // duration, second -15%, third -25%, and it falls away from there.
+    gEndlessClock += (raceTime * (percent - ENDLESS_TA_PCT_COST)) / 100;
     if (gEndlessClock < 0) {
         gEndlessClock = 0;
     }
@@ -1107,7 +1117,10 @@ void endless_round_finished(s32 roundPoints) {
 
 char *endless_clock_text(void) {
     s32 seconds = gEndlessClock / normalise_time(ENDLESS_TICKS_PER_SECOND);
-    char *end = endless_append_string(sEndlessClockText, "TIME ");
+    // "LEFT" rather than "TIME": this is what remains of the whole run's budget,
+    // and sitting next to a round number the word TIME read as a target for this
+    // one race. Same width as TIME, so no line grew.
+    char *end = endless_append_string(sEndlessClockText, "LEFT ");
 
     end = endless_append_number(end, seconds / 60);
     *end++ = ':';
@@ -1610,7 +1623,7 @@ char *endless_hud_text(void) {
         if (gEndlessMode == ENDLESS_MODE_SEASON) {
             endless_append_number(end, endless_score());
         } else if (gEndlessMode == ENDLESS_MODE_TIME_ATTACK) {
-            endless_append_string(end, endless_clock_text() + 5); // Skip "TIME ".
+            endless_append_string(end, endless_clock_text() + 5); // Skip "LEFT ".
         } else if (endless_required_position() == 0) {
             endless_append_string(end, "1ST");
         } else {

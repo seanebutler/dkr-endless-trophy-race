@@ -147,12 +147,19 @@ either way and a seed stays comparable across the setting.
   where its race number suggests. Mirrored tracks arrive as coin flips from race
   5 and every race from race 7 on the same proportional basis. Change
   `ENDLESS_SEASON_RACES` and every schedule follows it.
-- **Time Attack** — placement never ends the run. Instead every race is settled
-  against a three-minute run clock, refunded as a share of that race's own
-  duration: winning buys 30% back, fourth costs 10%, trailing costs 25%. The
-  run ends when the clock empties. The refund is a percentage rather than a
-  fixed number of seconds so the rule reads the same on Ancient Lake and on
-  Spaceport Alpha.
+- **Time Attack** — placement never ends the run directly. Instead there is a
+  three-minute **run clock** that every race charges 25% of its own duration,
+  with placement refunding against that charge: 1st refunds 30% (so a win nets
+  **+5%**), 2nd 10% (**-15%**), 3rd nothing (**-25%**), 4th **-35%**, and
+  trailing **-50%**. The run ends when the clock empties.
+
+  Everything is a share of the race's own duration rather than a fixed number of
+  seconds, so the rule reads the same on Ancient Lake and on Spaceport Alpha.
+
+  Winning being the only finish that gains time is what gives the mode its arc:
+  early rounds, where you can still beat the AI, bank a surplus; later rounds,
+  where it has outgrown you, spend it. The clock is a budget for the whole run,
+  not a target for the current race — which is why it is labelled LEFT rather than TIME.
 
 ### Multiplayer co-op
 
@@ -390,6 +397,15 @@ These cost real time to find, so they are written down rather than rediscovered:
   bleeds off, so the tables that always fire it are throwing the boost away.
 
 ## Fixed
+
+- **The Time Attack clock could only grow.** Races charged nothing, so the
+  placement percentages were pure income: 1st and 2nd added time, 3rd was
+  neutral, and only 4th or worse cost anything. A run could not end for anyone
+  who kept podiuming — a clock starting at 3:00 was routinely past 5:00 by round
+  four, against races lasting 90 seconds. The docs had always described the
+  intended rule ("winning *buys back* 30%"), which only makes sense against a
+  charge that was never implemented. Fixed in v0.7.2; every Time Attack record
+  predating it was set under a clock that could not run out.
 
 - **The AI stopped getting harder at round 8, and its ceiling was below a good
   human.** Table 9 was reached at round 8 and never changed again; the only
